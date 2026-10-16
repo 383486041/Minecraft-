@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:builtin/entity",
+  "overrides": [
+    { "predicate": { "flight_armor:variant": 1.0 }, "model": "flight_armor:item/flight_leggings_swift" },
+    { "predicate": { "flight_armor:variant": 2.0 }, "model": "flight_armor:item/flight_leggings_sentinel" }
+  ]
+}

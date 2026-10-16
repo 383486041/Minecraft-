@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "parts=false": {
+      "model": "flight_armor:block/charging_platform_assembled"
+    },
+    "parts=true": {
+      "model": "flight_armor:block/charging_platform_parts"
+    }
+  }
+}

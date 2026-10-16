@@ -1,0 +1,36 @@
+{
+	"schemaVersion": 1,
+	"id": "flight_armor",
+	"version": "${version}",
+	"name": "凌空战甲",
+	"description": "三型反重力战甲：装甲核心多平台绑定、主副召回、自动巡航战斗，以及空中与水下动力飞行。",
+	"authors": [
+		"Codex"
+	],
+	"license": "CC0-1.0",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"dev.codex.flightarmor.FlightArmorMod"
+		],
+		"client": [
+			"dev.codex.flightarmor.client.FlightArmorClient"
+		]
+	},
+	"mixins": [
+		"flight_armor.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "1.21.1",
+		"java": ">=21",
+		"fabric-api": ">=0.116.13+1.21.1",
+		"playeranimator": ">=2.0.4",
+		"bendy-lib": ">=5.1"
+	},
+	"suggests": {
+		"lambdynlights": "*",
+		"polytone": "*",
+		"veil": "*"
+	}
+}

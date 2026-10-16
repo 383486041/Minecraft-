@@ -1,0 +1,20 @@
+{
+  "variants": {
+    "level=0": { "model": "flight_armor:block/aura_light" },
+    "level=1": { "model": "flight_armor:block/aura_light" },
+    "level=2": { "model": "flight_armor:block/aura_light" },
+    "level=3": { "model": "flight_armor:block/aura_light" },
+    "level=4": { "model": "flight_armor:block/aura_light" },
+    "level=5": { "model": "flight_armor:block/aura_light" },
+    "level=6": { "model": "flight_armor:block/aura_light" },
+    "level=7": { "model": "flight_armor:block/aura_light" },
+    "level=8": { "model": "flight_armor:block/aura_light" },
+    "level=9": { "model": "flight_armor:block/aura_light" },
+    "level=10": { "model": "flight_armor:block/aura_light" },
+    "level=11": { "model": "flight_armor:block/aura_light" },
+    "level=12": { "model": "flight_armor:block/aura_light" },
+    "level=13": { "model": "flight_armor:block/aura_light" },
+    "level=14": { "model": "flight_armor:block/aura_light" },
+    "level=15": { "model": "flight_armor:block/aura_light" }
+  }
+}

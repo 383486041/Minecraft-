@@ -1,0 +1,30 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    "IDI",
+    "RCR",
+    "QQQ"
+  ],
+  "key": {
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "D": {
+      "item": "minecraft:diamond"
+    },
+    "R": {
+      "item": "minecraft:redstone_block"
+    },
+    "C": {
+      "item": "minecraft:copper_block"
+    },
+    "Q": {
+      "item": "minecraft:smooth_quartz"
+    }
+  },
+  "result": {
+    "id": "flight_armor:charging_platform",
+    "count": 1
+  }
+}

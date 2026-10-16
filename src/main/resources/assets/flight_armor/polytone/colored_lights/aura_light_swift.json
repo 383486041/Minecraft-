@@ -1,0 +1,10 @@
+{
+  "targets": [
+    "flight_armor:aura_light_swift"
+  ],
+  "colored_light": {
+    "color": "#D14CFF",
+    "radius": 15,
+    "brightness": 0.9
+  }
+}

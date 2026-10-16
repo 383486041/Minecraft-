@@ -1,0 +1,31 @@
+{
+  "required": true,
+  "package": "dev.codex.flightarmor.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "AbstractContainerMenuInvoker",
+    "ArmorStandIntegrityMixin",
+    "FlightPoseMixin",
+    "InventoryMenuMixin",
+    "LivingEntityVariantKnockbackMixin",
+    "PlayerVariantDamageMixin",
+    "ServerPlayerDeathMixin"
+  ],
+  "client": [
+    "AbstractContainerScreenAccessor",
+    "DiveLegPoseMixin",
+    "CruiseArmorStandModelMixin",
+    "FirstPersonArmorArmMixin",
+    "FirstPersonWeaponRecoilMixin",
+    "InventoryScreenMixin",
+    "ItemInHandRendererInvoker",
+    "MinecraftBladeAttackMixin",
+    "MultiPlayerGameModeHandBeamMixin",
+    "CreativeInventoryScreenMixin",
+	"CreativeSlotWrapperAccessor",
+    "RenderTypeInvoker"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,1575 @@
+plugins {
+	id 'fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+repositories {
+	mavenCentral()
+	maven {
+		name = 'KosmX'
+		url = 'https://maven.kosmx.dev/'
+	}
+	maven {
+		name = 'RedlanceMinecraft'
+		url = 'https://repo.redlance.org/public'
+	}
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"flight_armor" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+}
+
+dependencies {
+	// To change the versions see the gradle.properties file
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings loom.officialMojangMappings()
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+	// Fabric API. This is technically optional, but you probably want it anyway.
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+	modImplementation "dev.kosmx.player-anim:player-animation-lib-fabric:${project.player_animator_version}"
+	modRuntimeOnly "io.github.kosmx.bendy-lib:bendy-lib-fabric:${project.bendy_lib_version}"
+}
+
+processResources {
+	def version = project.version
+	inputs.property "version", version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+	it.options.encoding = 'UTF-8'
+}
+
+tasks.register('verifyArmorJointBounds') {
+	def objFiles = files(
+			'src/main/resources/assets/flight_armor/models/armor/flight_armor_vanguard.obj',
+			'src/main/resources/assets/flight_armor/models/armor/flight_armor_swift.obj',
+			'src/main/resources/assets/flight_armor/models/armor/flight_armor_sentinel.obj')
+	inputs.files(objFiles)
+	doLast {
+		objFiles.files.each { objFile ->
+		def bounds = [:].withDefault { [min: Double.POSITIVE_INFINITY, max: Double.NEGATIVE_INFINITY] }
+		def xBounds = [:].withDefault { [min: Double.POSITIVE_INFINITY, max: Double.NEGATIVE_INFINITY] }
+		def zBounds = [:].withDefault { [min: Double.POSITIVE_INFINITY, max: Double.NEGATIVE_INFINITY] }
+		def group = null
+		objFile.eachLine('UTF-8') { line ->
+			if (line.startsWith('g ')) {
+				group = line.substring(2).trim()
+			} else if (group != null && line.startsWith('v ')) {
+				def parts = line.trim().split(/\s+/)
+				def x = parts[1] as double
+				def y = parts[2] as double
+				def z = parts[3] as double
+				xBounds[group].min = Math.min(xBounds[group].min, x)
+				xBounds[group].max = Math.max(xBounds[group].max, x)
+				bounds[group].min = Math.min(bounds[group].min, y)
+				bounds[group].max = Math.max(bounds[group].max, y)
+				zBounds[group].min = Math.min(zBounds[group].min, z)
+				zBounds[group].max = Math.max(zBounds[group].max, z)
+			}
+		}
+		bounds.each { name, range ->
+			if (name ==~ /arm_(left|right)_upper_.*/ && range.max > 6.001D) {
+				throw new GradleException("上臂甲越过肘轴 Y=6: ${name}, max=${range.max}")
+			}
+			if (name ==~ /arm_(left|right)_forearm_.*/ && range.min < 5.999D) {
+				throw new GradleException("前臂甲越过肘轴 Y=6: ${name}, min=${range.min}")
+			}
+		}
+		// 用 Map 承载边界，避免 Groovy 在 Java 21 下为连续多个 double 闭包参数生成错误的局部变量表。
+		def requireUnderlayerCoverage = { name, expected ->
+			def groupName = name.toString()
+			if (!bounds.containsKey(groupName)) {
+				throw new GradleException("缺少立体软甲内衬: ${groupName}")
+			}
+			def xRange = xBounds[groupName]
+			def zRange = zBounds[groupName]
+			if (xRange.min > expected.minX || xRange.max < expected.maxX
+					|| zRange.min > expected.minZ || zRange.max < expected.maxZ) {
+				throw new GradleException("软甲内衬未完整覆盖玩家皮肤第二层: ${groupName}, " +
+						"X=[${xRange.min},${xRange.max}], Z=[${zRange.min},${zRange.max}]")
+			}
+		}
+		requireUnderlayerCoverage('body_underlayer_shadow', [minX: -4.33D, maxX: 4.33D, minZ: -2.35D, maxZ: 2.35D])
+		requireUnderlayerCoverage('arm_left_upper_underlayer_shadow', [minX: -1.35D, maxX: 3.35D, minZ: -2.35D, maxZ: 2.35D])
+		requireUnderlayerCoverage('arm_left_forearm_underlayer_shadow', [minX: -1.35D, maxX: 3.35D, minZ: -2.35D, maxZ: 2.35D])
+		requireUnderlayerCoverage('arm_right_upper_underlayer_shadow', [minX: -3.35D, maxX: 1.35D, minZ: -2.35D, maxZ: 2.35D])
+		requireUnderlayerCoverage('arm_right_forearm_underlayer_shadow', [minX: -3.35D, maxX: 1.35D, minZ: -2.35D, maxZ: 2.35D])
+		for (def side : ['left', 'right']) {
+			requireUnderlayerCoverage("leg_${side}_thigh_underlayer_shadow".toString(), [minX: -2.35D, maxX: 2.35D, minZ: -2.35D, maxZ: 2.35D])
+			requireUnderlayerCoverage("boot_${side}_underlayer_shadow".toString(), [minX: -2.35D, maxX: 2.35D, minZ: -2.35D, maxZ: 2.35D])
+			for (def joint : ["arm_${side}_elbow_seal_shadow".toString(), "leg_${side}_knee_seal_shadow".toString()]) {
+				if (!bounds.containsKey(joint) || bounds[joint].min > 5.75D || bounds[joint].max < 6.25D) {
+					throw new GradleException("肘膝软连接未跨过关节轴 Y=6: ${joint}")
+				}
+			}
+		}
+		if (zBounds['head_shell_shadow'].max < 4.25D) {
+			throw new GradleException("头盔后脑安全距离不足: maxZ=${zBounds['head_shell_shadow'].max}")
+		}
+		if (zBounds['head_shell_shadow'].max > 4.50D) {
+			throw new GradleException("头盔后脑轮廓过厚: maxZ=${zBounds['head_shell_shadow'].max}")
+		}
+		if (zBounds['head_faceplate_gunmetal'].min > -4.50D) {
+			throw new GradleException("头盔面甲前向覆盖不足: minZ=${zBounds['head_faceplate_gunmetal'].min}")
+		}
+		if (zBounds['head_faceplate_gunmetal'].max > -4.20D) {
+			throw new GradleException("面甲内表退入玩家脸部: maxZ=${zBounds['head_faceplate_gunmetal'].max}")
+		}
+		if (zBounds['visor_lens_visor'].max > -4.40D) {
+			throw new GradleException("面罩边缘退入玩家脸部: maxZ=${zBounds['visor_lens_visor'].max}")
+		}
+		for (def name : ['head_rear_left_gunmetal', 'head_rear_right_gunmetal']) {
+			if (zBounds[name].min < 4.35D) {
+				throw new GradleException("后脑板覆盖不足: ${name}, minZ=${zBounds[name].min}")
+			}
+		}
+		}
+	}
+}
+
+tasks.register('verifyHitscanDamageTags') {
+	def damageTypeTags = fileTree('src/main/resources/data') {
+		include '**/tags/damage_type/is_projectile.json'
+	}
+	inputs.files(damageTypeTags)
+	doLast {
+		if (damageTypeTags.files.isEmpty()) {
+			throw new GradleException('Missing minecraft:is_projectile damage tag')
+		}
+		def forbiddenHitscanDamageTypes = [
+			'flight_armor:gravity_pulse',
+			'flight_armor:core_beam'
+		]
+		def projectileTagFound = false
+		damageTypeTags.files.each { tagFile ->
+			def contents = tagFile.getText('UTF-8')
+			forbiddenHitscanDamageTypes.each { damageType ->
+				if (contents.contains(damageType)) {
+					throw new GradleException("Hitscan damage type must not be tagged as projectile: ${damageType} in ${tagFile}")
+				}
+			}
+			if (contents.contains('flight_armor:armor_missile')) {
+				projectileTagFound = true
+			}
+		}
+		if (!projectileTagFound) {
+			throw new GradleException('armor_missile must be tagged as minecraft:is_projectile')
+		}
+	}
+}
+tasks.register('verifyCoreNetworkState', JavaExec) {
+	group = 'verification'
+	description = 'Runs the offline multi-core switching and NBT network regression test.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.core.ArmorCoreNetworkStateTest'
+}
+
+tasks.register('verifyQuickSwitchPersistence', JavaExec) {
+	group = 'verification'
+	description = 'Runs offline quick-switch NBT, recovery and stale revision regression checks.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.core.QuickSwitchPersistenceTest'
+}
+tasks.register('verifyArmorFormationPlanner', JavaExec) {
+	group = 'verification'
+	description = 'Checks idempotent B-key core formation planning without launching Minecraft.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.core.ArmorFormationPlannerTest'
+}
+
+tasks.register('verifyArmorCoreMembershipHomeContract', JavaExec) {
+	group = 'verification'
+	description = 'Checks core membership remains independent from an optional platform home.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.core.ArmorCoreMembershipHomeContractTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifyArmorPrimaryFailover', JavaExec) {
+	group = 'verification'
+	description = 'Checks confirmed-missing primary armor promotes the best healthy linked suit.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.core.ArmorPrimaryFailoverPolicyTest'
+}
+tasks.register('verifyArmorCoreLifecyclePolicy', JavaExec) {
+	group = 'verification'
+	description = 'Checks that only definitive dropped-part destruction creates a core tombstone.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.core.ArmorCoreLifecyclePolicyTest'
+}
+
+tasks.register('verifyArmorCoreClientInteraction', JavaExec) {
+	group = 'verification'
+	description = 'Checks the authoritative core screen, server action masks and receipt timeout behavior.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.core.ArmorCoreClientInteractionContractTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifyArmorAssemblyIdentityContract', JavaExec) {
+	group = 'verification'
+	description = 'Checks atomic armor assembly cannot mix owner, suitId, slot or variant.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.assembly.ArmorAssemblyIdentityContractTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifySuitStateResolverPolicy', JavaExec) {
+	group = 'verification'
+	description = 'Checks server-authoritative core action conflict and carrier permissions.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.runtime.SuitStateResolverPolicyTest'
+}
+
+tasks.register('verifyArmorOperationArbitration') {
+	group = 'verification'
+	description = 'Checks B/N/wardrobe/platform/core operations remain serialized and B prioritizes the physically worn suit.'
+	def assemblyClient = file('src/client/java/dev/codex/flightarmor/client/assembly/ArmorAssemblyClient.java')
+	def cruiseController = file('src/main/java/dev/codex/flightarmor/cruise/ArmorCruiseController.java')
+	def coreController = file('src/main/java/dev/codex/flightarmor/core/ArmorCoreController.java')
+	def wardrobeController = file('src/main/java/dev/codex/flightarmor/wardrobe/ArmorWardrobeController.java')
+	def platformBlock = file('src/main/java/dev/codex/flightarmor/platform/ChargingPlatformBlock.java')
+	def combatGate = file('src/main/java/dev/codex/flightarmor/combat/ArmorCombatGate.java')
+	def combatController = file('src/main/java/dev/codex/flightarmor/combat/ArmorCombatController.java')
+	def creativeCoreScreen = file('src/client/java/dev/codex/flightarmor/mixin/CreativeInventoryScreenMixin.java')
+	def coreSlot = file('src/main/java/dev/codex/flightarmor/core/ArmorCoreSlot.java')
+	def capturedClients = [
+			file('src/client/java/dev/codex/flightarmor/client/core/ArmorCoreClient.java'),
+			file('src/client/java/dev/codex/flightarmor/client/cruise/CruiseCombatClient.java'),
+			file('src/client/java/dev/codex/flightarmor/client/combat/ArmorCombatClient.java'),
+			file('src/client/java/dev/codex/flightarmor/client/FlightArmorClient.java')
+	]
+	inputs.files([assemblyClient, cruiseController, coreController, wardrobeController, platformBlock,
+			combatGate, combatController,
+			creativeCoreScreen, coreSlot] + capturedClients)
+	doLast {
+		def assembly = assemblyClient.getText('UTF-8')
+		if (!assembly.contains('else if (quickSwitchClicked)')
+				|| !assembly.contains('isOperationCapturedThisTick')) {
+			throw new GradleException('B/N client arbitration is no longer mutually exclusive')
+		}
+		def flightClient = file('src/client/java/dev/codex/flightarmor/client/FlightArmorClient.java').getText('UTF-8')
+		if (!flightClient.contains('FlightInputArbitration.resolve(')
+				|| !flightClient.contains('keySprint.same(client.options.keyShift)')
+				|| !flightClient.contains('isPlatformInteractionCaptured(client)')) {
+			throw new GradleException('Flight input no longer arbitrates rebound sprint/sneak or Shift-use platform gestures')
+		}
+		def cruise = cruiseController.getText('UTF-8')
+		def requestStart = cruise.indexOf('public static void handleRequest')
+		def requestEnd = cruise.indexOf('public static boolean recallPlatformSuit', requestStart)
+		def request = cruise.substring(requestStart, requestEnd)
+		def wornSuitRoute = request.indexOf('if (ModItems.hasFullSet(player))')
+		def partialSuitRoute = request.indexOf('if (!allArmorSlotsEmpty(player))')
+		def configuredPlan = request.indexOf('executeConfiguredRecallPlanForB')
+		def independentFallback = request.indexOf('CruiseState state')
+		if (wornSuitRoute < 0 || partialSuitRoute < 0 || configuredPlan < 0 || independentFallback < 0
+				|| wornSuitRoute > partialSuitRoute || partialSuitRoute > configuredPlan
+				|| configuredPlan > independentFallback
+				|| !request.substring(partialSuitRoute, configuredPlan).contains('ArmorAssemblyController.handleRequest(player)')
+				|| !request.contains('deployWornSuit(player, ownership.suitId())')) {
+			throw new GradleException('B must route exact full/partial physical armor before core planning and owner-carrier fallback')
+		}
+		def core = coreController.getText('UTF-8')
+		if (!core.contains('isMovementAction(payload.action())')
+				|| core.contains('binding == null || ArmorCruiseController.hasActiveCruise(player)')) {
+			throw new GradleException('Core transaction lock or exact-suit platform switch routing regressed')
+		}
+		def creativeCore = creativeCoreScreen.getText('UTF-8')
+		if (!creativeCore.contains('flightArmor$unwrapCoreSlot(slot)')
+				|| !creativeCore.contains('clickType != ClickType.PICKUP')
+				|| !creativeCore.contains('flightArmor$coreBeforeClick, carriedAfter')
+				|| !creativeCore.contains('ci.cancel()')) {
+			throw new GradleException('Creative inventory core clicks are no longer isolated from backpack clicks')
+		}
+		if (!coreSlot.getText('UTF-8').contains('container.canPlaceItem(getContainerSlot(), stack)')) {
+			throw new GradleException('Core slot ownership validation no longer happens before item transfer')
+		}
+		if (!wardrobeController.getText('UTF-8').contains('hasActiveQuickSwitch(player)')
+				|| wardrobeController.getText('UTF-8').contains('hasActiveCruise(player)')
+				|| platformBlock.getText('UTF-8').contains('hasActiveCruise(player)')
+				|| combatGate.getText('UTF-8').contains('hasActiveCruise(player)')
+				|| combatController.getText('UTF-8').contains('hasActiveCruise(player)')) {
+			throw new GradleException('Exact transactions must remain guarded without globally locking unrelated cruise suits')
+		}
+		capturedClients.each { source ->
+			if (!source.getText('UTF-8').contains('isOperationCapturedThisTick')) {
+				throw new GradleException('Same-tick operation capture is missing from a client input controller')
+			}
+		}
+	}
+}
+
+tasks.register('verifyArmorCoreSlotTransactions') {
+	group = 'verification'
+	description = 'Guards lossless core-slot pickup, atomic creative cursor synchronization and block interaction pass-through.'
+	def creativeCoreScreen = file('src/client/java/dev/codex/flightarmor/mixin/CreativeInventoryScreenMixin.java')
+	def coreController = file('src/main/java/dev/codex/flightarmor/core/ArmorCoreController.java')
+	def coreInventory = file('src/main/java/dev/codex/flightarmor/core/ArmorCoreInventory.java')
+	def creativePayload = file('src/main/java/dev/codex/flightarmor/network/ArmorCoreCreativeSyncPayload.java')
+	def coreItem = file('src/main/java/dev/codex/flightarmor/item/ArmorNavigationCoreItem.java')
+	inputs.files(creativeCoreScreen, coreController, coreInventory, creativePayload, coreItem)
+	doLast {
+		def creative = creativeCoreScreen.getText('UTF-8')
+		if (!creative.contains('flightArmor$coreBeforeClick, carriedAfter')
+				|| !creative.contains('ItemStack.matches(flightArmor$coreBeforeClick, after)')
+				|| !creative.contains('client.player.inventoryMenu.getCarried()')
+				|| !creative.contains('clickType != ClickType.PICKUP')
+				|| !creative.contains('ci.cancel()')
+				|| creative.contains('flightArmor$handleCreativeCorePickup')) {
+			throw new GradleException('Creative core slot must retain vanilla cursor movement and send one atomic slot/cursor request')
+		}
+		def payload = creativePayload.getText('UTF-8')
+		if (!payload.contains('ItemStack core, ItemStack expectedCore, ItemStack carriedAfter')
+				|| payload.contains('returnedCore')) {
+			throw new GradleException('Creative core payload must carry desired slot, expected slot and resulting cursor')
+		}
+		def controller = coreController.getText('UTF-8')
+		def handlerStart = controller.indexOf('public static void handleCreativeCoreSync')
+		def handlerEnd = controller.indexOf('private static boolean isValidCreativeCoreStack', handlerStart)
+		def handler = controller.substring(handlerStart, handlerEnd)
+		if (!handler.contains('ItemStack.matches(current, expected)')
+				|| !handler.contains('player.inventoryMenu.setCarried(carriedAfter')
+				|| !handler.contains('player.inventoryMenu.sendAllDataToRemote()')
+				|| handler.contains('player.getInventory().add(')
+				|| handler.contains('player.drop(')) {
+			throw new GradleException('Creative core synchronization lost atomic cursor/CAS validation or reintroduced duplication')
+		}
+		def inventory = coreInventory.getText('UTF-8')
+		if (!inventory.contains('stored.copyWithCount(1)')
+				|| !inventory.contains('return current.copyWithCount(1);')) {
+			throw new GradleException('SavedData-backed core stacks must never be exposed or returned by mutable reference')
+		}
+		def item = coreItem.getText('UTF-8')
+		if (!item.contains('return InteractionResult.PASS;')
+				|| item.contains('InteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION')) {
+			throw new GradleException('Navigation core must pass ordinary block interaction using the Minecraft 1.21.1 API')
+		}
+	}
+}
+
+tasks.register('verifyArmorCoreInteractionContracts') {
+	group = 'verification'
+	description = 'Guards core membership, lossless slot removal, platform binding gestures and server-authoritative B/K interactions.'
+	def coreController = file('src/main/java/dev/codex/flightarmor/core/ArmorCoreController.java')
+	def coreSavedData = file('src/main/java/dev/codex/flightarmor/core/ArmorCoreSavedData.java')
+	def coreInventory = file('src/main/java/dev/codex/flightarmor/core/ArmorCoreInventory.java')
+	def coreSlot = file('src/main/java/dev/codex/flightarmor/core/ArmorCoreSlot.java')
+	def inventoryMenuMixin = file('src/main/java/dev/codex/flightarmor/mixin/InventoryMenuMixin.java')
+	def coreItem = file('src/main/java/dev/codex/flightarmor/item/ArmorNavigationCoreItem.java')
+	def platformBlock = file('src/main/java/dev/codex/flightarmor/platform/ChargingPlatformBlock.java')
+	def assemblyClient = file('src/client/java/dev/codex/flightarmor/client/assembly/ArmorAssemblyClient.java')
+	def coreClient = file('src/client/java/dev/codex/flightarmor/client/core/ArmorCoreClient.java')
+	def coreScreen = file('src/client/java/dev/codex/flightarmor/client/core/ArmorCoreCommandScreen.java')
+	inputs.files(coreController, coreSavedData, coreInventory, coreSlot, inventoryMenuMixin,
+			coreItem, platformBlock, assemblyClient, coreClient, coreScreen)
+	doLast {
+		def section = { String source, String start, String end ->
+			int from = source.indexOf(start)
+			int to = from < 0 ? -1 : source.indexOf(end, from + start.length())
+			if (from < 0 || to < 0) {
+				throw new GradleException("Core interaction contract marker missing: ${start} -> ${end}")
+			}
+			source.substring(from, to)
+		}
+
+		def inventory = coreInventory.getText('UTF-8')
+		def removal = section(inventory, 'public ItemStack removeItem(int slot, int amount)',
+				'public ItemStack removeItemNoUpdate')
+		if (!inventory.contains('stored.copyWithCount(1)')
+				|| !removal.contains('data().setCore(owner.getUUID(), ItemStack.EMPTY)')
+				|| !removal.contains('return current.copyWithCount(1);')
+				|| removal.contains('return ItemStack.EMPTY;\\n\\t}')) {
+			throw new GradleException('Core-slot pickup no longer clears and returns one authoritative copied core atomically')
+		}
+		def slot = coreSlot.getText('UTF-8')
+		if (!slot.contains('!ArmorCoreController.isCoreChangeLocked(serverPlayer)')
+				|| !slot.contains('container.stillValid(player)')
+				|| !slot.contains('container.canPlaceItem(getContainerSlot(), stack)')) {
+			throw new GradleException('Core slot bypasses transaction lock, ownership or container validation')
+		}
+		def menu = inventoryMenuMixin.getText('UTF-8')
+		if (!menu.contains('if (fromCoreSlot && !coreSlot.mayPickup(player))')
+				|| !menu.contains('source.setByPlayer(ItemStack.EMPTY, original)')
+				|| !menu.contains('if (!moved)')) {
+			throw new GradleException('Shift-click core transfer can bypass pickup lock or erase the source on a failed move')
+		}
+
+		def platform = platformBlock.getText('UTF-8')
+		int heldCoreBranch = platform.indexOf('stack.is(ModItems.ARMOR_NAVIGATION_CORE)')
+		int shiftBranch = platform.indexOf('player.isShiftKeyDown()', heldCoreBranch)
+		if (heldCoreBranch < 0 || shiftBranch < 0 || heldCoreBranch > shiftBranch
+				|| !platform.substring(heldCoreBranch, shiftBranch)
+						.contains('ArmorCoreController.bindHeldCoreToPlatform')) {
+			throw new GradleException('Held-core platform binding must win over Shift deposit/display interaction')
+		}
+		def item = coreItem.getText('UTF-8')
+		def useOn = section(item, 'public InteractionResult useOn(UseOnContext context)',
+				'public boolean isFoil')
+		if (!useOn.contains('return InteractionResult.PASS;')
+				|| useOn.contains('activateAndOpen') || useOn.contains('setCore(')
+				|| useOn.contains('.shrink(')) {
+			throw new GradleException('Right-clicking an ordinary block may activate, replace or consume a navigation core')
+		}
+
+		def client = coreClient.getText('UTF-8')
+		def assembly = assemblyClient.getText('UTF-8')
+		def screen = coreScreen.getText('UTF-8')
+		def controller = coreController.getText('UTF-8')
+		if (!client.contains('ClientPlayNetworking.send(new ArmorCoreOpenPayload())')
+				|| !screen.contains('ArmorCoreAction.BIND_LOOKED_AT')
+				|| !controller.contains('case BIND_LOOKED_AT -> bindLookedAt(player)')) {
+			throw new GradleException('K panel/crosshair bind no longer routes through one server-authoritative action')
+		}
+		def openTick = section(client, 'public static void tick(Minecraft client)',
+				'public static ArmorCoreSnapshotPayload snapshot()')
+		int captureOpenTick = openTick.indexOf('ArmorAssemblyClient.captureOperationThisTick(client)')
+		int sendOpenTick = openTick.indexOf('ClientPlayNetworking.send(new ArmorCoreOpenPayload())')
+		if (!assembly.contains('public static void captureOperationThisTick(Minecraft client)')
+				|| !assembly.contains('capturedOperationTick = client.player.tickCount')
+				|| captureOpenTick < 0 || sendOpenTick < 0 || captureOpenTick > sendOpenTick) {
+			throw new GradleException('K must publish same-tick operation capture immediately before sending its open request')
+		}
+		def lookedAt = section(controller, 'private static String bindLookedAt(ServerPlayer player)',
+				'private static String primaryRoleChangeBlockReason')
+		if (!lookedAt.contains('activeIdentity(player, record)')
+				|| !lookedAt.contains('player.pick(6.0D')
+				|| !lookedAt.contains('instanceof ChargingPlatformBlockEntity')
+				|| !lookedAt.contains('bindPlatformIfCoreEquipped(player, platform)')) {
+			throw new GradleException('Crosshair binding lost active-core, range or authoritative platform validation')
+		}
+
+		def bPlan = section(controller, 'public static BKeyPlanResult executeConfiguredRecallPlanForB',
+				'public enum BKeyPlanResult')
+		if (bPlan.contains('ModItems.hasFullSet(player)')
+				|| bPlan.contains('DEPLOY_WORN_PRIMARY')
+				|| !bPlan.contains('ArmorFormationPlanner.plan(snapshot)')) {
+			throw new GradleException('B core planner must remain empty-slot formation only; exact worn routing belongs to the cruise entrypoint')
+		}
+		def snapshot = section(controller, 'private static void sendSnapshot(ServerPlayer player, String resultMessage)',
+				'private static boolean reconcileWornSuitAssociation')
+		if (snapshot.contains('reconcileWornSuitAssociation(player)')) {
+			throw new GradleException('Core snapshot must be a read-only query and cannot migrate worn-suit membership')
+		}
+		def association = section(controller, 'private static boolean reconcileWornSuitAssociation(ServerPlayer player)',
+				'private static ArmorCoreSnapshotPayload.Status legacyCoreStatus')
+		if (!association.contains('ensureOwnedEquippedSet(player)')
+				|| !association.contains('data.associateUnlinkedSuit(player.getUUID(), active, ownership.suitId())')) {
+			throw new GradleException('Equipment discovery must link only suits absent from every core network')
+		}
+
+		def saved = coreSavedData.getText('UTF-8')
+		def setPrimary = section(saved, 'boolean setPrimary(UUID ownerId',
+				'Optional<PlatformBinding> binding')
+		if (!setPrimary.contains('record.linkedSuitIds.contains(suitId)')
+				|| setPrimary.contains('record.bindings.containsKey(suitId)')) {
+			throw new GradleException('Canonical core membership must use linkedSuitIds, not optional platform homes')
+		}
+		def formation = section(controller, 'private static FormationExecution reconcileConfiguredFormation',
+				'private static FormationExecution executeFormationCommands')
+		if (!formation.contains('record.linkedSuitIds.contains(selectedPrimary)')
+				|| formation.contains('record.bindings.containsKey(selectedPrimary)')) {
+			throw new GradleException('Selected worn/online suit is still rejected when it lacks an optional platform home')
+		}
+		def execution = section(controller, 'private static FormationExecution executeFormationCommands',
+				'private static String formationWaitMessage')
+		int firstSwitch = execution.indexOf('switch (command.type())')
+		int globalBindingReject = execution.indexOf('if (binding == null)')
+		if (firstSwitch < 0 || (globalBindingReject >= 0 && globalBindingReject < firstSwitch)) {
+			throw new GradleException('Online carrier recall is globally blocked by a missing optional platform binding')
+		}
+	}
+}
+
+tasks.register('verifyFlightLightColorCurve', JavaExec) {
+	group = 'verification'
+	description = 'Checks monotonic realized-speed light colors and reverse braking gradients.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.flight.FlightLightColorCurveTest'
+}
+
+tasks.register('verifySonicBoomLatch', JavaExec) {
+	group = 'verification'
+	description = 'Checks one-shot Mach crossing and hysteresis without launching Minecraft.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.flight.SonicBoomLatchTest'
+}
+
+tasks.register('verifyFlightInputArbitration', JavaExec) {
+	group = 'verification'
+	description = 'Checks sprint/sneak rebinding and armor command chords cannot produce conflicting flight input.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.flight.FlightInputArbitrationTest'
+}
+
+tasks.register('verifyFlightUnits', JavaExec) {
+	group = 'verification'
+	description = 'Checks the two-metres-per-block speed conversion without changing gameplay Mach tuning.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.flight.FlightUnitsTest'
+}
+
+tasks.register('verifyHighSpeedSteering', JavaExec) {
+	group = 'verification'
+	description = 'Checks bounded U-turns, maneuver braking, pitch speed preservation and shared steering snapshots.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.flight.HighSpeedSteeringTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifyArmorFlightSoundMix', JavaExec) {
+	group = 'verification'
+	description = 'Checks realized-speed three-layer sound mixing and single-shot flight edges.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.sound.ArmorFlightSoundMixTest'
+}
+
+tasks.register('verifyLowAltitudeFeedback', JavaExec) {
+	group = 'verification'
+	description = 'Checks realized-speed low-altitude triggers, sound coupling, first-person safety and hard budgets.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.flight.LowAltitudeFeedbackModelTest'
+}
+
+tasks.register('verifyRadialDoppler', JavaExec) {
+	group = 'verification'
+	description = 'Checks radial Doppler motion warmup, smoothing, strict pitch bounds and bounded cruise-observation retention.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.sound.RadialDopplerModelTest'
+}
+
+tasks.register('verifyVanguardRamKinematics', JavaExec) {
+	group = 'verification'
+	description = 'Checks Vanguard gradual dive acceleration and swept AABB target contacts.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.cruise.VanguardRamKinematicsTest'
+}
+
+tasks.register('verifyHomingMissileKinematics', JavaExec) {
+	group = 'verification'
+	description = 'Checks bounded missile guidance, acceleration and swept AABB contacts.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.combat.HomingMissileKinematicsTest'
+}
+
+tasks.register('verifyArmorWeaponRules', JavaExec) {
+	group = 'verification'
+	description = 'Checks charged-only native explosions, high-speed ram gating and delayed ranged blade corridors.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.combat.ArmorWeaponRulesTest'
+}
+
+tasks.register('verifyArmorSemanticAnchors', JavaExec) {
+	group = 'verification'
+	description = 'Checks variant/pose semantic anchors and rejects migrated hard-coded emitter offsets.'
+	dependsOn tasks.named('testClasses')
+	classpath = files(sourceSets.test.output, sourceSets.main.output)
+	mainClass = 'dev.codex.flightarmor.combat.ArmorAnchorLayoutTest'
+}
+
+tasks.register('verifyHomingMissileEntityRegistration') {
+	group = 'verification'
+	description = 'Guards the persistent homing-missile registration against premature DFU lookup warnings.'
+	def registrationFile = file('src/main/java/dev/codex/flightarmor/combat/ModCombatEntities.java')
+	def entityFile = file('src/main/java/dev/codex/flightarmor/combat/ArmorHomingMissileEntity.java')
+	inputs.files(registrationFile, entityFile)
+	doLast {
+		def registration = registrationFile.getText('UTF-8')
+		def entity = entityFile.getText('UTF-8')
+		if (!registration.contains('.build();')) {
+			throw new GradleException('Homing missile must use Fabric injected EntityType.Builder.build() so DFU lookup is deferred until registry assignment.')
+		}
+		if (registration.contains('.build(FlightArmorMod.id(')) {
+			throw new GradleException('Passing the missile id to EntityType.Builder.build(String) restores the No data fixer registered warning.')
+		}
+		if (registration =~ /\.(noSave|disableSaving)\s*\(/) {
+			throw new GradleException('Homing missile persistence must not be disabled to silence the DFU warning.')
+		}
+		if (!registration.contains('.clientTrackingRange(12)') || !registration.contains('.updateInterval(1)')) {
+			throw new GradleException('Homing missile native tracking range/update interval changed unexpectedly.')
+		}
+		if (!registration.contains('Registry.register(BuiltInRegistries.ENTITY_TYPE')) {
+			throw new GradleException('Homing missile must retain native entity-type registry assignment for saving and spawn packets.')
+		}
+		if (!entity.contains('addAdditionalSaveData(CompoundTag tag)') || !entity.contains('readAdditionalSaveData(CompoundTag tag)')) {
+			throw new GradleException('Homing missile NBT persistence hooks are missing.')
+		}
+	}
+}
+tasks.register('verifyAutomaticEquipHoverTransition', JavaExec) {
+	group = 'verification'
+	description = 'Checks ordinary equipment false-to-true hover edges without launching Minecraft.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.flight.AutomaticEquipHoverTransitionTest'
+}
+
+tasks.register('verifyIndependentCruiseReturnHandoff', JavaExec) {
+	group = 'verification'
+	description = 'Checks atomic independent-carrier return admission and three-stage platform approach.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.cruise.IndependentCruiseReturnHandoffTest'
+}
+
+tasks.register('verifyWornSuitDeploymentPolicy', JavaExec) {
+	group = 'verification'
+	description = 'Checks exact worn-suit B routing with an existing independent carrier.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.cruise.WornSuitDeploymentPolicyTest'
+}
+
+tasks.register('verifyWornSuitDeploymentContract', JavaExec) {
+	group = 'verification'
+	description = 'Checks exact-suit server routing and lossless carrier rollback source contracts.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.cruise.WornSuitDeploymentContractTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifyDestructiveLaserMath', JavaExec) {
+	group = 'verification'
+	description = 'Checks finite laser DDA ordering and hardness-weighted destruction budgets.'
+	dependsOn tasks.named('testClasses')
+	classpath = files(sourceSets.test.output, sourceSets.main.output)
+	mainClass = 'dev.codex.flightarmor.combat.DestructiveLaserMathTest'
+}
+
+tasks.register('verifyLaserProtectionTag') {
+	group = 'verification'
+	description = 'Checks the destructive core beam protection tag contains dangerous command and portal blocks.'
+	def protectionTag = file('src/main/resources/data/flight_armor/tags/block/laser_protected.json')
+	inputs.file(protectionTag)
+	doLast {
+		def parsed = new groovy.json.JsonSlurper().parse(protectionTag)
+		def required = [
+			'minecraft:command_block',
+			'minecraft:structure_block',
+			'minecraft:jigsaw',
+			'minecraft:end_portal',
+			'minecraft:end_gateway',
+			'minecraft:nether_portal'
+		]
+		required.each { id ->
+			if (!parsed.values.contains(id)) {
+				throw new GradleException("laser_protected is missing dangerous block: ${id}")
+			}
+		}
+	}
+}
+tasks.register('verifyItemPreviewResources') {
+	group = 'verification'
+	description = 'Checks variant OBJ item previews, dynamic renderer mappings and compact held transforms.'
+	def modelDir = file('src/main/resources/assets/flight_armor/models/item')
+	def objFiles = files(
+			'src/main/resources/assets/flight_armor/models/armor/flight_armor_vanguard.obj',
+			'src/main/resources/assets/flight_armor/models/armor/flight_armor_swift.obj',
+			'src/main/resources/assets/flight_armor/models/armor/flight_armor_sentinel.obj')
+	def previewSource = file('src/client/java/dev/codex/flightarmor/client/render/obj/FlightArmorItemPreviewRenderer.java')
+	def clientInitializer = file('src/client/java/dev/codex/flightarmor/client/FlightArmorClient.java')
+	def objResourceSource = file('src/client/java/dev/codex/flightarmor/client/render/obj/FlightArmorObjResources.java')
+	def variantDataSource = file('src/main/java/dev/codex/flightarmor/variant/ArmorVariantData.java')
+	inputs.files(objFiles)
+	inputs.dir(modelDir)
+	inputs.file(previewSource)
+	inputs.files(clientInitializer, objResourceSource, variantDataSource)
+	doLast {
+		def parser = new groovy.json.JsonSlurper()
+		def slots = ['flight_helmet', 'flight_chestplate', 'flight_leggings', 'flight_boots']
+		def armorModels = []
+		slots.each { slot ->
+			def baseFile = new File(modelDir, "${slot}.json")
+			def base = parser.parse(baseFile)
+			armorModels.add(baseFile)
+			if (base.parent != 'minecraft:builtin/entity') {
+				throw new GradleException("Armor item must use the static OBJ renderer: ${baseFile}")
+			}
+			def overrides = base.overrides.collectEntries { entry ->
+				[(entry.predicate['flight_armor:variant'].toString()): entry.model.toString()]
+			}
+			if (overrides['1.0'] != "flight_armor:item/${slot}_swift"
+					|| overrides['2.0'] != "flight_armor:item/${slot}_sentinel") {
+				throw new GradleException("Incomplete ArmorVariant model mapping: ${baseFile}")
+			}
+			['swift', 'sentinel'].each { variant ->
+				def variantFile = new File(modelDir, "${slot}_${variant}.json")
+				armorModels.add(variantFile)
+				if (parser.parse(variantFile).parent != 'minecraft:builtin/entity') {
+					throw new GradleException("Variant item still uses a generated 2D model: ${variantFile}")
+				}
+			}
+		}
+		armorModels.each { model ->
+			if (model.getText('UTF-8').contains('minecraft:item/generated')) {
+				throw new GradleException("Generated 2D armor icon is forbidden: ${model}")
+			}
+		}
+
+		def coreModel = parser.parse(new File(modelDir, 'armor_navigation_core.json'))
+		if (coreModel.parent != 'minecraft:builtin/entity') {
+			throw new GradleException('Navigation core must use its dedicated 3D renderer')
+		}
+		def platformModel = parser.parse(new File(modelDir, 'charging_platform.json'))
+		if (platformModel.parent != 'flight_armor:block/charging_platform_assembled'
+				|| platformModel.gui_light != 'front') {
+			throw new GradleException('Charging platform item must retain a clear dedicated 3D model')
+		}
+		def heldPlatformScale = platformModel.display.firstperson_righthand.scale.collect { it as double }.max()
+		if (heldPlatformScale > 0.25D) {
+			throw new GradleException("Charging platform first-person preview obscures the view: ${heldPlatformScale}")
+		}
+
+		def renderer = previewSource.getText('UTF-8')
+		['FLIGHT_HELMET', 'FLIGHT_CHESTPLATE', 'FLIGHT_LEGGINGS', 'FLIGHT_BOOTS',
+				'ARMOR_NAVIGATION_CORE'].each { item ->
+			if (!renderer.contains("registry.register(ModItems.${item}, INSTANCE)")) {
+				throw new GradleException("Missing dynamic item renderer registration for ${item}")
+			}
+		}
+		if (!renderer.contains('ArmorVariantData.get(stack)')
+				|| !renderer.contains('contextScale = 0.28F')) {
+			throw new GradleException('Item preview must read stack ArmorVariant and stay compact in first person')
+		}
+		['tickCount', 'getGameTime', 'System.currentTimeMillis', 'Util.getMillis'].each { clock ->
+			if (renderer.contains(clock)) {
+				throw new GradleException("GUI preview must be static and clock-free: ${clock}")
+			}
+		}
+		def coreStart = renderer.indexOf('private static void renderNavigationCore')
+		def coreEnd = renderer.indexOf('private static void applyContextTransform', coreStart)
+		if (coreStart < 0 || coreEnd <= coreStart) {
+			throw new GradleException('Navigation-core preview renderer method is missing')
+		}
+		def coreRenderer = renderer.substring(coreStart, coreEnd)
+		def baseDraw = coreRenderer.indexOf(
+				'renderGroup(mesh, group, poseStack, base, packedLight')
+		def emissiveAcquire = coreRenderer.indexOf(
+				'VertexConsumer emissive = buffers.getBuffer')
+		def emissiveDraw = coreRenderer.indexOf(
+				'renderGroup(mesh, group, poseStack, emissive, LightTexture.FULL_BRIGHT')
+		if (coreRenderer.contains('glowing ? emissive : base') || baseDraw < 0
+				|| emissiveAcquire <= baseDraw || emissiveDraw <= emissiveAcquire) {
+			throw new GradleException('Navigation-core preview must render base and emissive passes sequentially')
+		}
+
+		if (!clientInitializer.getText('UTF-8').contains('FlightArmorItemPreviewRenderer.initialize()')) {
+			throw new GradleException('Dynamic item preview renderer is not initialized by the client entrypoint')
+		}
+		def objResources = objResourceSource.getText('UTF-8')
+		['VANGUARD', 'SWIFT', 'SENTINEL'].each { variant ->
+			if (!objResources.contains("ArmorVariant.${variant}")) {
+				throw new GradleException("Missing OBJ resource mapping for ${variant}")
+			}
+		}
+		if (!variantDataSource.getText('UTF-8').contains(
+				'readExplicit(stack).orElse(ArmorVariant.DEFAULT)')) {
+			throw new GradleException('Legacy armor stacks must safely fall back to Vanguard')
+		}
+		def hashes = objFiles.files.collect { file ->
+			java.security.MessageDigest.getInstance('SHA-256').digest(file.bytes).encodeHex().toString()
+		}.toSet()
+		if (hashes.size() != 3) {
+			throw new GradleException('Vanguard, Swift and Sentinel item previews must use distinct OBJ meshes')
+		}
+		def hasAny = { String name, List<String> fragments -> fragments.any { name.contains(it) } }
+		def classify = { String raw ->
+			def name = raw.toLowerCase(java.util.Locale.ROOT)
+			if (hasAny(name, ['left_boot', 'boot_left', 'right_boot', 'boot_right', 'ankle'])) return 'FEET'
+			if (hasAny(name, ['left_leg', 'leg_left', 'right_leg', 'leg_right'])) return 'LEGS'
+			if (hasAny(name, ['left_arm', 'arm_left', 'right_arm', 'arm_right'])) return 'CHEST'
+			if (hasAny(name, ['head', 'helmet', 'visor', 'faceplate', 'jaw', 'temple', 'brow'])) return 'HEAD'
+			if (hasAny(name, ['body', 'chest', 'torso', 'core', 'collar', 'spine', 'back',
+					'vane', 'wing'])) return 'CHEST'
+			return null
+		}
+		def isLed = { String name -> name.endsWith('_led') || name.contains('_led_')
+				|| name.startsWith('led_') || name.contains('emissive') || name.contains('_glow') }
+		objFiles.files.each { obj ->
+			def groups = obj.readLines('UTF-8').findAll { it.startsWith('g ') }
+					.collect { it.substring(2).trim().toLowerCase(java.util.Locale.ROOT) }
+			def unmatched = groups.findAll { classify(it) == null }
+			if (!unmatched.isEmpty()) {
+				throw new GradleException("Unmapped OBJ item groups in ${obj.name}: ${unmatched}")
+			}
+			def bySlot = groups.groupBy { classify(it) }
+			['HEAD', 'CHEST', 'LEGS', 'FEET'].each { slot ->
+				if (bySlot[slot] == null || bySlot[slot].isEmpty()) {
+					throw new GradleException("${obj.name} has no ${slot} item geometry")
+				}
+				if (!bySlot[slot].any { isLed(it) }) {
+					throw new GradleException("${obj.name} ${slot} preview has no full-bright emissive group")
+				}
+			}
+			def standardCore = groups.contains('core_housing_titanium')
+					&& groups.contains('core_reactor_led')
+			def sentinelCore = groups.contains('core_housing_sentinel_titanium')
+					&& groups.contains('core_reactor_sentinel_led')
+			if (!standardCore && !sentinelCore) {
+				throw new GradleException("${obj.name} cannot supply the navigation-core 3D preview")
+			}
+		}
+	}
+}
+tasks.register('verifyArmorEscortPersistence', JavaExec) {
+	group = 'verification'
+	description = 'Checks escort locator NBT, CAS recovery and duplicate-carrier fault isolation.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.cruise.ArmorEscortPersistenceTest'
+}
+
+tasks.register('verifyArmorIntegrityPersistence', JavaExec) {
+	group = 'verification'
+	description = 'Checks integrity arithmetic, owner+suit NBT persistence and duplicate fault isolation.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.integrity.ArmorIntegrityPersistenceTest'
+}
+
+tasks.register('verifyIndependentCruiseTactics', JavaExec) {
+	group = 'verification'
+	description = 'Checks independent threat hysteresis, variant tactic graphs and action locks.'
+	dependsOn tasks.named('testClasses')
+	classpath = files(sourceSets.test.output, sourceSets.main.output)
+	mainClass = 'dev.codex.flightarmor.cruise.IndependentCruiseTacticsTest'
+}
+
+tasks.register('verifyGravityImpactSweep', JavaExec) {
+	group = 'verification'
+	description = 'Checks high-speed swept wall/entity contacts and once-per-dive action locks.'
+	dependsOn tasks.named('testClasses')
+	classpath = files(sourceSets.test.output, sourceSets.main.output)
+	mainClass = 'dev.codex.flightarmor.combat.GravityImpactSweepTest'
+}
+
+def remappedRuntimeJar = tasks.named('remapJar').flatMap { it.archiveFile }
+tasks.register('verifyMixinJarContents') {
+	group = 'verification'
+	description = 'Parses packaged mixin configs and verifies every declared runtime class with exact case.'
+	dependsOn tasks.named('remapJar')
+	inputs.file(remappedRuntimeJar)
+	doLast {
+		def jarFile = remappedRuntimeJar.get().asFile
+		if (!jarFile.isFile()) {
+			throw new GradleException('Remapped runtime JAR does not exist: ' + jarFile)
+		}
+		def zip = new java.util.zip.ZipFile(jarFile)
+		try {
+			int verifiedMixinClasses = 0
+			int verifiedEntrypoints = 0
+			def entryNames = zip.entries().collect { it.name }
+			def exactEntry = { String requested, String purpose ->
+				def entry = zip.getEntry(requested)
+				if (entry != null && !entry.directory) return entry
+				def caseMatches = entryNames.findAll { it.equalsIgnoreCase(requested) }
+				if (!caseMatches.isEmpty()) {
+					throw new GradleException(purpose + ' has wrong path/class case: expected '
+							+ requested + ', found ' + caseMatches)
+				}
+				throw new GradleException(purpose + ' is missing from ' + jarFile.name + ': ' + requested)
+			}
+			def parseJson = { String path, String purpose ->
+				def entry = exactEntry(path, purpose)
+				zip.getInputStream(entry).withCloseable { stream ->
+					new groovy.json.JsonSlurper().parse(
+							new InputStreamReader(stream, java.nio.charset.StandardCharsets.UTF_8))
+				}
+			}
+
+			def metadata = parseJson('fabric.mod.json', 'Fabric metadata')
+			def configuredMixins = metadata.mixins
+			if (!(configuredMixins instanceof Collection) || configuredMixins.isEmpty()) {
+				throw new GradleException('fabric.mod.json has no packaged mixin configuration')
+			}
+			def configNames = configuredMixins.collect { configured ->
+				if (configured instanceof CharSequence) return configured.toString()
+				if (configured instanceof Map && configured.config instanceof CharSequence) {
+					return configured.config.toString()
+				}
+				throw new GradleException('Unsupported fabric.mod.json mixin entry: ' + configured)
+			}
+			if (configNames.size() != configNames.toSet().size()) {
+				throw new GradleException('Duplicate packaged mixin configs: ' + configNames)
+			}
+
+			configNames.each { String configName ->
+				def config = parseJson(configName, 'Mixin config')
+				def packageName = config.package
+				if (packageName != 'dev.codex.flightarmor.mixin') {
+					throw new GradleException(configName + ' package must be exactly '
+							+ 'dev.codex.flightarmor.mixin, found ' + packageName)
+				}
+				if (!(packageName ==~ /[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)+/)) {
+					throw new GradleException(configName + ' has invalid Java package syntax: ' + packageName)
+				}
+				def declaredPaths = []
+				['mixins', 'client', 'server'].each { String section ->
+					def declared = config.containsKey(section) ? config[section] : []
+					if (!(declared instanceof Collection)) {
+						throw new GradleException(configName + ' ' + section + ' must be an array')
+					}
+					declared.each { mixinNameValue ->
+						if (!(mixinNameValue instanceof CharSequence)) {
+							throw new GradleException(configName + ' ' + section
+									+ ' contains a non-string class: ' + mixinNameValue)
+						}
+						def mixinName = mixinNameValue.toString()
+						if (!(mixinName ==~ /[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*/)) {
+							throw new GradleException(configName + ' ' + section
+									+ ' has invalid mixin class name: ' + mixinName)
+						}
+						def classPath = packageName.replace('.', '/') + '/' +
+								mixinName.replace('.', '/') + '.class'
+						exactEntry(classPath, configName + ' ' + section + ' mixin ' + mixinName)
+						declaredPaths.add(classPath)
+						verifiedMixinClasses++
+					}
+				}
+				if (declaredPaths.size() != declaredPaths.toSet().size()) {
+					throw new GradleException(configName + ' declares duplicate mixin classes: ' + declaredPaths)
+				}
+			}
+
+			def entrypoints = metadata.entrypoints
+			if (!(entrypoints instanceof Map)) {
+				throw new GradleException('fabric.mod.json entrypoints must be an object')
+			}
+			entrypoints.each { environment, configuredEntries ->
+				if (!(configuredEntries instanceof Collection)) {
+					throw new GradleException('fabric.mod.json entrypoints.' + environment + ' must be an array')
+				}
+				configuredEntries.each { configured ->
+					def value = configured instanceof CharSequence ? configured.toString()
+							: configured instanceof Map && configured.value instanceof CharSequence
+									? configured.value.toString() : null
+					if (value == null || value.isBlank()) {
+						throw new GradleException('Invalid fabric entrypoint for ' + environment + ': ' + configured)
+					}
+					def className = value.contains('::') ? value.substring(0, value.indexOf('::')) : value
+					def classPath = className.replace('.', '/') + '.class'
+					exactEntry(classPath, 'Fabric ' + environment + ' entrypoint ' + className)
+					verifiedEntrypoints++
+				}
+			}
+			logger.lifecycle('Verified packaged runtime classes in ' + jarFile.name + ': '
+					+ verifiedMixinClasses + ' mixins, ' + verifiedEntrypoints + ' Fabric entrypoints')
+		}
+		finally {
+			zip.close()
+		}
+	}
+}
+tasks.register('verifyChargingPlatformResources') {
+	group = 'verification'
+	description = 'Validates the 1.21.1 charging-platform recipe schema and every referenced model texture.'
+	def recipeFile = file('src/main/resources/data/flight_armor/recipe/charging_platform.json')
+	def blockstateFile = file('src/main/resources/assets/flight_armor/blockstates/charging_platform.json')
+	def itemModelFile = file('src/main/resources/assets/flight_armor/models/item/charging_platform.json')
+	def blockModelDir = file('src/main/resources/assets/flight_armor/models/block')
+	def relatedBlockModels = fileTree(blockModelDir) { include 'charging_platform*.json' }
+	inputs.files(recipeFile, blockstateFile, itemModelFile, relatedBlockModels)
+	doLast {
+		def parser = new groovy.json.JsonSlurper()
+		def recipe = parser.parse(recipeFile)
+		if (recipe.type != 'minecraft:crafting_shaped' || !(recipe.key instanceof Map)) {
+			throw new GradleException('charging_platform must be a shaped recipe with an object key map')
+		}
+		def expectedIngredients = [
+				'I': 'minecraft:iron_ingot',
+				'D': 'minecraft:diamond',
+				'R': 'minecraft:redstone_block',
+				'C': 'minecraft:copper_block',
+				'Q': 'minecraft:smooth_quartz'
+		]
+		expectedIngredients.each { symbol, itemId ->
+			def ingredient = recipe.key[symbol]
+			if (!(ingredient instanceof Map)) {
+				throw new GradleException("Minecraft 1.21.1 ingredient ${symbol} must be an object, not ${ingredient?.getClass()?.simpleName}")
+			}
+			def selectors = ['item', 'tag'].findAll { ingredient[it] != null }
+			if (selectors.size() != 1 || ingredient.item != itemId) {
+				throw new GradleException("Invalid charging-platform ingredient ${symbol}: expected {item: ${itemId}}")
+			}
+		}
+		if (recipe.key.keySet() != expectedIngredients.keySet()) {
+			throw new GradleException("Unexpected charging-platform recipe symbols: ${recipe.key.keySet()}")
+		}
+		if (recipe.result?.id != 'flight_armor:charging_platform'
+				|| (recipe.result?.count as int) != 1) {
+			throw new GradleException('Invalid charging-platform recipe result')
+		}
+
+		def referencedModels = new LinkedHashSet<File>()
+		def blockstate = parser.parse(blockstateFile)
+		blockstate.variants.each { state, definition ->
+			def variants = definition instanceof List ? definition : [definition]
+			variants.each { variant ->
+				def modelId = variant.model?.toString()
+				if (modelId == null || !modelId.startsWith('flight_armor:block/')) {
+					throw new GradleException("Charging-platform state ${state} has an invalid model: ${modelId}")
+				}
+				referencedModels.add(new File(blockModelDir,
+						modelId.substring('flight_armor:block/'.length()) + '.json'))
+			}
+		}
+		def itemModel = parser.parse(itemModelFile)
+		if (itemModel.parent?.toString()?.startsWith('flight_armor:block/')) {
+			referencedModels.add(new File(blockModelDir,
+					itemModel.parent.toString().substring('flight_armor:block/'.length()) + '.json'))
+		} else {
+			throw new GradleException('Charging-platform item must reference a flight_armor block model')
+		}
+		referencedModels.addAll(relatedBlockModels.files)
+
+		def verifiedMinecraft1211Textures = [
+				'minecraft:block/polished_deepslate',
+				'minecraft:block/iron_block',
+				'minecraft:block/quartz_block_top',
+				'minecraft:block/sea_lantern'
+		] as Set
+		referencedModels.each { modelFile ->
+			if (!modelFile.isFile()) {
+				throw new GradleException("Missing charging-platform model: ${modelFile}")
+			}
+			def model = parser.parse(modelFile)
+			def textures = model.textures instanceof Map ? model.textures : [:]
+			textures.each { name, rawReference ->
+				def reference = rawReference?.toString()
+				if (reference == 'minecraft:block/smooth_quartz') {
+					throw new GradleException("smooth_quartz is a block id, not a 1.21.1 atlas texture: ${modelFile}")
+				}
+				if (reference?.startsWith('minecraft:block/')
+						&& !verifiedMinecraft1211Textures.contains(reference)) {
+					throw new GradleException("Unverified Minecraft 1.21.1 texture ${reference} in ${modelFile}")
+				}
+				if (reference?.startsWith('flight_armor:')) {
+					def localPath = reference.substring('flight_armor:'.length())
+					def textureFile = file("src/main/resources/assets/flight_armor/textures/${localPath}.png")
+					if (!textureFile.isFile()) throw new GradleException("Missing local texture ${reference}")
+				}
+			}
+			(model.elements ?: []).eachWithIndex { element, elementIndex ->
+				(element.faces ?: [:]).each { direction, face ->
+					def reference = face.texture?.toString()
+					if (reference?.startsWith('#')
+							&& !textures.containsKey(reference.substring(1))) {
+						throw new GradleException("Undefined texture ${reference} on ${direction} face of element ${elementIndex} in ${modelFile}")
+					}
+				}
+			}
+		}
+	}
+}
+
+tasks.register('verifyChargingPlatformMechanicalTransition') {
+	group = 'verification'
+	description = 'Guards one-shot platform lock-arm transitions and forbids periodic idle animation.'
+	def stateSource = file('src/client/java/dev/codex/flightarmor/client/platform/ChargingPlatformVisualState.java')
+	def rendererSource = file('src/client/java/dev/codex/flightarmor/client/platform/ChargingPlatformRenderer.java')
+	inputs.files(stateSource, rendererSource)
+	doLast {
+		def state = stateSource.getText('UTF-8')
+		def renderer = rendererSource.getText('UTF-8')
+		if (!state.contains('TRANSITION_TICKS = 18.0F')
+				|| !state.contains('assembledScale') || !state.contains('partsScale')
+				|| !state.contains('lockProgress')) {
+			throw new GradleException('Charging platform must keep the 18-tick assembled/parts/lock transition.')
+		}
+		['Math.sin', 'Mth.sin', 'floorMod', 'tickCount %'].each { periodic ->
+			if (state.contains(periodic)) {
+				throw new GradleException("Charging platform idle state must not use periodic motion: ${periodic}")
+			}
+		}
+		if (!renderer.contains('renderMechanicalLocks(sample.lockProgress()')
+				|| !renderer.contains('sample.transitioning()')
+				|| !renderer.contains('LOCK_DETAIL_DISTANCE_SQUARED')
+				|| !renderer.contains('MechanicalLockRenderType.INSTANCE')
+				|| !renderer.contains('STATIC_PREVIEW_TICK = 0')) {
+			throw new GradleException('Charging platform one-shot lock geometry, transition LOD, or static preview is missing.')
+		}
+		if (renderer.contains('renderSingleBlock') || renderer.contains('Blocks.IRON_BLOCK')
+				|| renderer.contains('Blocks.SEA_LANTERN')) {
+			throw new GradleException('Charging platform lock arms must not render full block models every frame.')
+		}
+		if (renderer.contains('shouldRenderOffScreen')
+				|| !renderer.contains('PLATFORM_VIEW_DISTANCE = 48')) {
+			throw new GradleException('Charging platform preview must stay on vanilla section-frustum culling with a finite view distance.')
+		}
+	}
+}
+
+tasks.register('verifyClientVisualSettings') {
+	group = 'verification'
+	description = 'Guards the client-only JSON settings page and its live presentation consumers.'
+	def settingsDir = file('src/client/java/dev/codex/flightarmor/client/settings')
+	def settingsData = file("${settingsDir}/FlightArmorClientSettings.java")
+	def settingsStore = file("${settingsDir}/FlightArmorClientSettingsStore.java")
+	def settingsScreen = file("${settingsDir}/FlightArmorClientSettingsScreen.java")
+	def clientEntry = file('src/client/java/dev/codex/flightarmor/client/FlightArmorClient.java')
+	def coreScreen = file('src/client/java/dev/codex/flightarmor/client/core/ArmorCoreCommandScreen.java')
+	def hud = file('src/client/java/dev/codex/flightarmor/client/hud/FlightSpeedHud.java')
+	def trail = file('src/client/java/dev/codex/flightarmor/client/render/SwiftFlightTrailRenderer.java')
+	def cruiseAtmosphere = file('src/client/java/dev/codex/flightarmor/client/cruise/CruiseRecallFxRenderer.java')
+	def platformAtmosphere = file('src/client/java/dev/codex/flightarmor/client/platform/PlatformRecallFxRenderer.java')
+	def lowAltitudeFeedback = file('src/client/java/dev/codex/flightarmor/client/environment/LowAltitudeFeedbackClient.java')
+	def flightSound = file('src/client/java/dev/codex/flightarmor/client/audio/ArmorSoundController.java')
+	def assemblySound = file('src/client/java/dev/codex/flightarmor/client/audio/ArmorAssemblySoundController.java')
+	def weaponSound = file('src/client/java/dev/codex/flightarmor/client/combat/ArmorWeaponSoundController.java')
+	def platformSound = file('src/client/java/dev/codex/flightarmor/client/platform/PlatformRecallClient.java')
+	inputs.files(settingsData, settingsStore, settingsScreen, clientEntry, coreScreen,
+			hud, trail, cruiseAtmosphere, platformAtmosphere, lowAltitudeFeedback,
+			flightSound, assemblySound, weaponSound, platformSound)
+	doLast {
+		[settingsData, settingsStore, settingsScreen].each { source ->
+			if (!source.isFile()) throw new GradleException("Missing client settings source: ${source}")
+		}
+		def data = settingsData.getText('UTF-8')
+		['hudEnabled', 'trailEnabled', 'environmentFeedbackEnabled', 'masterVolume',
+				'CURRENT_SCHEMA_VERSION'].each { field ->
+			if (!data.contains(field)) throw new GradleException("Client settings are missing ${field}")
+		}
+		def store = settingsStore.getText('UTF-8')
+		['FabricLoader.getInstance().getConfigDir()', 'flight_armor-client.json',
+				'StandardCharsets.UTF_8', 'StandardCopyOption.ATOMIC_MOVE',
+				'JsonParser.parseReader'].each { contract ->
+			if (!store.contains(contract)) {
+				throw new GradleException("Client settings persistence lost contract: ${contract}")
+			}
+		}
+		def forbiddenAuthority = ['ClientPlayNetworking', 'ServerPlayNetworking',
+				'ArmorCoreAction', 'ArmorEscortProfile', 'terrainDestruction', 'pvpEnabled']
+		def settingsSources = fileTree(settingsDir) { include '*.java' }.files
+		forbiddenAuthority.each { token ->
+			if (settingsSources.any { it.getText('UTF-8').contains(token) }) {
+				throw new GradleException("Client-only settings must not own server authority: ${token}")
+			}
+		}
+		if (!clientEntry.getText('UTF-8').contains('FlightArmorClientSettingsStore.initialize()')) {
+			throw new GradleException('Client settings store is not initialized by the client entrypoint')
+		}
+		if (!coreScreen.getText('UTF-8').contains('new FlightArmorClientSettingsScreen(this)')) {
+			throw new GradleException('Armor-core panel no longer opens the client settings page')
+		}
+		if (!hud.getText('UTF-8').contains('.hudEnabled()')) {
+			throw new GradleException('Flight HUD does not consume hudEnabled')
+		}
+		if (!trail.getText('UTF-8').contains('.trailEnabled()')) {
+			throw new GradleException('Swift trail does not consume trailEnabled')
+		}
+		if (![cruiseAtmosphere, platformAtmosphere].every {
+			it.getText('UTF-8').contains('.environmentFeedbackEnabled()')
+		}) {
+			throw new GradleException('Atmospheric recall feedback does not consume environmentFeedbackEnabled')
+		}
+		if (!lowAltitudeFeedback.getText('UTF-8').contains('.environmentFeedbackEnabled()')) {
+			throw new GradleException('Low-altitude world feedback does not consume environmentFeedbackEnabled')
+		}
+		[flightSound, assemblySound, weaponSound, platformSound].each { source ->
+			if (!source.getText('UTF-8').contains('FlightArmorClientSettingsStore.masterVolume()')) {
+				throw new GradleException("Armor audio bypasses the client master volume: ${source.name}")
+			}
+		}
+	}
+}
+
+tasks.register('verifyClientOperationGuide') {
+	group = 'verification'
+	description = 'Guards the five-page in-game operation guide and bilingual translated UI text.'
+	def guideScreen = file('src/client/java/dev/codex/flightarmor/client/settings/FlightArmorGuideScreen.java')
+	def settingsScreen = file('src/client/java/dev/codex/flightarmor/client/settings/FlightArmorClientSettingsScreen.java')
+	def zhFile = file('src/main/resources/assets/flight_armor/lang/zh_cn.json')
+	def enFile = file('src/main/resources/assets/flight_armor/lang/en_us.json')
+	inputs.files(guideScreen, settingsScreen, zhFile, enFile)
+	doLast {
+		[guideScreen, settingsScreen, zhFile, enFile].each { source ->
+			if (!source.isFile()) throw new GradleException("Missing operation-guide resource: ${source}")
+		}
+		def guide = guideScreen.getText('UTF-8')
+		def settings = settingsScreen.getText('UTF-8')
+		if (!settings.contains('new FlightArmorGuideScreen(this)')) {
+			throw new GradleException('Client settings no longer opens the built-in operation guide')
+		}
+		['PLATFORM(', 'SUMMON(', 'FLIGHT(', 'ESCORT(', 'WEAPONS(',
+				'GuideTabButton', 'renderStepNode', 'drawPageGlyph',
+				'Math.min(MAX_PANEL_WIDTH', 'Math.min(MAX_PANEL_HEIGHT', 'getWidth() < 64',
+				'screen.flight_armor.guide.previous', 'screen.flight_armor.guide.next'].each { marker ->
+			if (!guide.contains(marker)) {
+				throw new GradleException("Operation guide lost page or visual marker: ${marker}")
+			}
+		}
+		def smallGuiWidth = 320
+		def smallGuiHeight = 240
+		def smallPanelWidth = Math.min(448, Math.max(300, smallGuiWidth - 20))
+		def smallPanelHeight = Math.min(244, Math.max(224, smallGuiHeight - 12))
+		def smallTabWidth = ((smallPanelWidth - 20) - 3 * 4) / 5
+		if (smallPanelWidth > smallGuiWidth || smallPanelHeight > smallGuiHeight
+				|| smallTabWidth < 50) {
+			throw new GradleException('Operation guide no longer fits the 320x240 small-window contract')
+		}
+		[guide, settings].each { uiSource ->
+			if (!uiSource.contains('Component.translatable(')) {
+				throw new GradleException('Operation/settings UI must use translated components')
+			}
+			if (uiSource.contains('Component.literal(')) {
+				throw new GradleException('New operation/settings UI text bypasses language files')
+			}
+			['ClientPlayNetworking', 'ServerPlayNetworking', 'ArmorCoreActionPayload',
+					'ServerPlayer', 'docs/OPERATION_GUIDE'].each { forbidden ->
+				if (uiSource.contains(forbidden)) {
+					throw new GradleException("Client guide must remain protocol-free and self-contained: ${forbidden}")
+				}
+			}
+		}
+
+		def parser = new groovy.json.JsonSlurper()
+		def zh = parser.parse(zhFile)
+		def en = parser.parse(enFile)
+		def requiredKeys = [
+				'screen.flight_armor.core.client_settings',
+				'screen.flight_armor.core.client_settings.tooltip',
+				'screen.flight_armor.client_settings.title',
+				'screen.flight_armor.client_settings.reset',
+				'screen.flight_armor.client_settings.guide',
+				'screen.flight_armor.client_settings.done',
+				'screen.flight_armor.client_settings.hud',
+				'screen.flight_armor.client_settings.trail',
+				'screen.flight_armor.client_settings.environment',
+				'screen.flight_armor.client_settings.toggle',
+				'screen.flight_armor.client_settings.on',
+				'screen.flight_armor.client_settings.off',
+				'screen.flight_armor.client_settings.local_only',
+				'screen.flight_armor.client_settings.config_path',
+				'screen.flight_armor.client_settings.master_volume',
+				'screen.flight_armor.guide.title',
+				'screen.flight_armor.guide.page_counter',
+				'screen.flight_armor.guide.previous',
+				'screen.flight_armor.guide.back',
+				'screen.flight_armor.guide.next'
+		]
+		def pageIds = ['platform', 'summon', 'flight', 'escort', 'weapons']
+		pageIds.each { page ->
+			requiredKeys.add("screen.flight_armor.guide.tab.${page}")
+			requiredKeys.add("screen.flight_armor.guide.page.${page}.title")
+			requiredKeys.add("screen.flight_armor.guide.page.${page}.subtitle")
+			(1..3).each { step ->
+				requiredKeys.add("screen.flight_armor.guide.page.${page}.step.${step}.title")
+				requiredKeys.add("screen.flight_armor.guide.page.${page}.step.${step}.body")
+			}
+			requiredKeys.add("screen.flight_armor.guide.page.${page}.tip")
+		}
+		requiredKeys.each { key ->
+			if (!(zh[key] instanceof String) || zh[key].isBlank()) {
+				throw new GradleException("Missing zh_cn operation-guide translation: ${key}")
+			}
+			if (!(en[key] instanceof String) || en[key].isBlank()) {
+				throw new GradleException("Missing en_us operation-guide translation: ${key}")
+			}
+		}
+	}
+}
+
+tasks.register('verifyTacticalFormationPreview') {
+	group = 'verification'
+	description = 'Guards the static armor-core tactical formation preview and its safe panel layout.'
+	def screenFile = file('src/client/java/dev/codex/flightarmor/client/core/ArmorCoreCommandScreen.java')
+	def rendererFile = file('src/client/java/dev/codex/flightarmor/client/core/TacticalFormationPreviewRenderer.java')
+	def zhFile = file('src/main/resources/assets/flight_armor/lang/zh_cn.json')
+	def enFile = file('src/main/resources/assets/flight_armor/lang/en_us.json')
+	inputs.files(screenFile, rendererFile, zhFile, enFile)
+	doLast {
+		def screen = screenFile.getText('UTF-8')
+		def renderer = rendererFile.getText('UTF-8')
+		if (screen.contains('TacticalFormationPreviewRenderer.render(')) {
+			throw new GradleException('The command center must not regress to the ambiguous miniature node preview')
+		}
+		['LIST_X = 10', 'LIST_Y = 60', 'LIST_W = 190', 'VISIBLE_ROWS = 7',
+				'"控制权与战斗策略"', 'commandAutonomousButton', 'commandDirectedButton',
+				'setSelected(commandSelectable && commanded)', '"编队方案"',
+				'String primaryPlan', 'String escortPlan',
+				'ArmorCoreAction.RECALL_ALL'].each { token ->
+			if (!screen.contains(token)) {
+				throw new GradleException("Unified command-center layout lost marker: ${token}")
+			}
+		}
+		def settingsLabelKey = 'screen.flight_armor.core.client_settings'
+		def settingsTooltipKey = 'screen.flight_armor.core.client_settings.tooltip'
+		if (!screen.contains('new FlightArmorClientSettingsScreen(this)')
+				|| !screen.contains("Component.translatable(\"${settingsLabelKey}\")")
+				|| !screen.contains("Component.translatable(\"${settingsTooltipKey}\")")) {
+			throw new GradleException('Client settings entry must retain translated label, tooltip and navigation')
+		}
+		def parser = new groovy.json.JsonSlurper()
+		def translations = [zh_cn: parser.parse(zhFile), en_us: parser.parse(enFile)]
+		translations.each { locale, values ->
+			[settingsLabelKey, settingsTooltipKey].each { key ->
+				if (!(values[key] instanceof String) || values[key].isBlank()) {
+					throw new GradleException("Missing ${locale} armor-core settings translation: ${key}")
+				}
+			}
+		}
+		['enableScissor', 'disableScissor', 'MAX_ARMOR_NODES = 6', 'drawOwner',
+				'drawPlatform', 'primarySuitId', 'selectedSuit', 'case READY, OFFLINE',
+				'case ESCORTING, CRUISING', 'case INCOMPLETE, INVALID, CONFLICT'].each { token ->
+			if (!renderer.contains(token)) {
+				throw new GradleException("Tactical formation preview lost required state/layout marker: ${token}")
+			}
+		}
+		['partialTick', 'gameTime', 'tickCount', 'Math.sin', 'Mth.sin', 'Math.cos',
+				'Mth.cos', 'System.currentTimeMillis', 'Util.getMillis'].each { token ->
+			if (renderer.contains(token)) {
+				throw new GradleException("Tactical formation preview must remain static: ${token}")
+			}
+		}
+	}
+}
+tasks.named('test') {
+	failOnNoDiscoveredTests = false
+}
+
+tasks.register('verifyArmorSuitPanelContract', JavaExec) {
+	group = 'verification'
+	description = 'Checks authoritative right-click suit status, carrier control and refresh behavior.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.suitpanel.ArmorSuitPanelContractTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifyClientVisualContract', JavaExec) {
+	group = 'verification'
+	description = 'Checks readable suit terminal, whole-suit Sentinel transformation and segmented cannon wings.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.client.ClientVisualContractTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifyArmorAssemblyFlightUnlock', JavaExec) {
+	group = 'verification'
+	description = 'Checks that a completed assembly timeline cannot leave normal WASD flight permanently locked.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.client.ArmorAssemblyFlightUnlockContractTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifySentinelDualFormMesh', JavaExec) {
+	group = 'verification'
+	description = 'Checks Sentinel uses a full independent shell, mapped transformation zones and large cannon wings.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.client.SentinelDualFormMeshContractTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifyRemoteArmorCommandPolicy', JavaExec) {
+	group = 'verification'
+	description = 'Checks bounded nearby-suit response timing and variant melee ultimate identities.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.cruise.RemoteArmorCommandPolicyTest'
+}
+
+tasks.register('verifyRemoteArmorCommandContract', JavaExec) {
+	group = 'verification'
+	description = 'Checks server authority, worn-suit priority and exclusive carrier movement routing.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.cruise.ArmorRemoteCommandContractTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifyArmorCombatLaneIsolation', JavaExec) {
+	group = 'verification'
+	description = 'Checks worn-player and exact autonomous carrier combat lane isolation.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.combat.ArmorCombatLaneIsolationContractTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifySentinelDronePods', JavaExec) {
+	group = 'verification'
+	description = 'Checks Sentinel pod LOS, visual-only companion rays, exact-lane fallback and sound deduplication.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.combat.SentinelDronePodContractTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifySentinelWingmanEntities', JavaExec) {
+	group = 'verification'
+	description = 'Checks real persistent Sentinel wingmen, exact identity dedupe, transitions and hypersonic following.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.combat.SentinelWingmanContractTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifySentinelOverdriveSalvo', JavaExec) {
+	group = 'verification'
+	description = 'Checks the server-authoritative three-lane Sentinel G charge and bounded cataclysm.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.combat.SentinelOverdriveSalvoTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifyArmorConfigurationContract', JavaExec) {
+	group = 'verification'
+	description = 'Checks the Sentinel-only two-form data, M-key authority, arbitration and HUD contract.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.configuration.ArmorConfigurationContractTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifySentinelCombatAuthorization', JavaExec) {
+	group = 'verification'
+	description = 'Checks exact-suit Sentinel form authorization and the 30-tick combat lock.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.configuration.SentinelCombatAuthorizationTest'
+	systemProperty 'flightArmor.projectDir', projectDir.absolutePath
+}
+
+tasks.register('verifySentinelFlightProfiles', JavaExec) {
+	group = 'verification'
+	description = 'Checks Sentinel dual-form flight authority, transition braking, and hypersonic ramp.'
+	dependsOn testClasses
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.codex.flightarmor.flight.SentinelFlightProfilesTest'
+}
+
+tasks.named('check') {
+	dependsOn tasks.named('verifyArmorJointBounds')
+	dependsOn tasks.named('verifyHitscanDamageTags')
+	dependsOn tasks.named('verifyCoreNetworkState')
+	dependsOn tasks.named('verifyQuickSwitchPersistence')
+	dependsOn tasks.named('verifyArmorFormationPlanner')
+	dependsOn tasks.named('verifyArmorCoreMembershipHomeContract')
+	dependsOn tasks.named('verifyArmorCoreLifecyclePolicy')
+	dependsOn tasks.named('verifyArmorPrimaryFailover')
+	dependsOn tasks.named('verifyArmorCoreClientInteraction')
+	dependsOn tasks.named('verifyArmorAssemblyIdentityContract')
+	dependsOn tasks.named('verifyArmorSuitPanelContract')
+	dependsOn tasks.named('verifyClientVisualContract')
+	dependsOn tasks.named('verifyArmorAssemblyFlightUnlock')
+	dependsOn tasks.named('verifySentinelDualFormMesh')
+	dependsOn tasks.named('verifyRemoteArmorCommandPolicy')
+	dependsOn tasks.named('verifyRemoteArmorCommandContract')
+	dependsOn tasks.named('verifyArmorCombatLaneIsolation')
+	dependsOn tasks.named('verifySentinelDronePods')
+	dependsOn tasks.named('verifySentinelWingmanEntities')
+	dependsOn tasks.named('verifySentinelOverdriveSalvo')
+	dependsOn tasks.named('verifyArmorConfigurationContract')
+	dependsOn tasks.named('verifySentinelCombatAuthorization')
+	dependsOn tasks.named('verifySentinelFlightProfiles')
+	dependsOn tasks.named('verifySuitStateResolverPolicy')
+	dependsOn tasks.named('verifyArmorOperationArbitration')
+	dependsOn tasks.named('verifyArmorCoreSlotTransactions')
+	dependsOn tasks.named('verifyArmorCoreInteractionContracts')
+	dependsOn tasks.named('verifyFlightInputArbitration')
+	dependsOn tasks.named('verifyFlightUnits')
+	dependsOn tasks.named('verifyHighSpeedSteering')
+	dependsOn tasks.named('verifyFlightLightColorCurve')
+	dependsOn tasks.named('verifySonicBoomLatch')
+	dependsOn tasks.named('verifyArmorFlightSoundMix')
+	dependsOn tasks.named('verifyLowAltitudeFeedback')
+	dependsOn tasks.named('verifyRadialDoppler')
+	dependsOn tasks.named('verifyAutomaticEquipHoverTransition')
+	dependsOn tasks.named('verifyVanguardRamKinematics')
+	dependsOn tasks.named('verifyHomingMissileKinematics')
+	dependsOn tasks.named('verifyArmorWeaponRules')
+	dependsOn tasks.named('verifyArmorSemanticAnchors')
+	dependsOn tasks.named('verifyTacticalFormationPreview')
+	dependsOn tasks.named('verifyHomingMissileEntityRegistration')
+	dependsOn tasks.named('verifyIndependentCruiseReturnHandoff')
+	dependsOn tasks.named('verifyWornSuitDeploymentPolicy')
+	dependsOn tasks.named('verifyWornSuitDeploymentContract')
+	dependsOn tasks.named('verifyArmorEscortPersistence')
+	dependsOn tasks.named('verifyArmorIntegrityPersistence')
+	dependsOn tasks.named('verifyIndependentCruiseTactics')
+	dependsOn tasks.named('verifyGravityImpactSweep')
+	dependsOn tasks.named('verifyMixinJarContents')
+	dependsOn tasks.named('verifyDestructiveLaserMath')
+	dependsOn tasks.named('verifyLaserProtectionTag')
+	dependsOn tasks.named('verifyItemPreviewResources')
+	dependsOn tasks.named('verifyChargingPlatformResources')
+	dependsOn tasks.named('verifyClientVisualSettings')
+	dependsOn tasks.named('verifyClientOperationGuide')
+	dependsOn tasks.named('verifyChargingPlatformMechanicalTransition')
+}
+
+java {
+	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
+	// if it is present.
+	// If you remove this line, sources will not be generated.
+	withSourcesJar()
+
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+jar {
+	def projectName = project.name
+	inputs.property "projectName", projectName
+
+	from("LICENSE") {
+		rename { "${it}_$projectName"}
+	}
+}
+
+// configure the maven publication
+publishing {
+	publications {
+		create("mavenJava", MavenPublication) {
+			from components.java
+		}
+	}
+
+	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
+	repositories {
+		// Add repositories to publish to here.
+		// Notice: This block does NOT have the same function as the block in the top level.
+		// The repositories here will be used for publishing your artifact, not for
+		// retrieving dependencies.
+	}
+}

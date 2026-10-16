@@ -1,0 +1,20 @@
+{
+	"match": {
+		"type": "minecraft:player",
+		"equipment": {
+			"head": {
+				"items": "flight_armor:flight_helmet"
+			},
+			"chest": {
+				"items": "flight_armor:flight_chestplate"
+			},
+			"legs": {
+				"items": "flight_armor:flight_leggings"
+			},
+			"feet": {
+				"items": "flight_armor:flight_boots"
+			}
+		}
+	},
+	"luminance": 13
+}

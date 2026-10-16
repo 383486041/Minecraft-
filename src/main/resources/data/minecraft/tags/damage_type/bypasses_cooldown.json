@@ -1,0 +1,8 @@
+{
+  "replace": false,
+  "values": [
+    "flight_armor:gravity_pulse",
+    "flight_armor:core_beam",
+    "flight_armor:gravity_impact"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "replace": false,
+  "values": [
+    "minecraft:bedrock",
+    "minecraft:barrier",
+    "minecraft:structure_void",
+    "minecraft:light",
+    "flight_armor:aura_light_vanguard",
+    "flight_armor:aura_light_swift",
+    "flight_armor:aura_light_sentinel",
+    "minecraft:command_block",
+    "minecraft:chain_command_block",
+    "minecraft:repeating_command_block",
+    "minecraft:structure_block",
+    "minecraft:jigsaw",
+    "minecraft:end_portal",
+    "minecraft:end_portal_frame",
+    "minecraft:end_gateway",
+    "minecraft:nether_portal",
+    "minecraft:moving_piston",
+    "minecraft:piston_head"
+  ]
+}

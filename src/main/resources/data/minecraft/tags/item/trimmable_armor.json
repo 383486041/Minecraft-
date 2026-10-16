@@ -1,0 +1,9 @@
+{
+  "replace": false,
+  "values": [
+    "flight_armor:flight_helmet",
+    "flight_armor:flight_chestplate",
+    "flight_armor:flight_leggings",
+    "flight_armor:flight_boots"
+  ]
+}

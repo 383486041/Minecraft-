@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    { "item": "minecraft:netherite_helmet" },
+    { "item": "minecraft:phantom_membrane" },
+    { "item": "minecraft:phantom_membrane" },
+    { "item": "minecraft:ender_eye" }
+  ],
+  "result": {
+    "id": "flight_armor:flight_helmet",
+    "count": 1
+  }
+}

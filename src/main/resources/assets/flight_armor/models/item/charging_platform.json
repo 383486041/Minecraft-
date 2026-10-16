@@ -1,0 +1,13 @@
+{
+  "parent": "flight_armor:block/charging_platform_assembled",
+  "gui_light": "front",
+  "display": {
+    "gui": { "rotation": [28, 225, 0], "translation": [0, 1, 0], "scale": [0.88, 0.88, 0.88] },
+    "ground": { "rotation": [0, 0, 0], "translation": [0, 2, 0], "scale": [0.42, 0.42, 0.42] },
+    "fixed": { "rotation": [18, 225, 0], "translation": [0, 0, 0], "scale": [0.68, 0.68, 0.68] },
+    "firstperson_righthand": { "rotation": [12, 205, 0], "translation": [1, 1, 0], "scale": [0.22, 0.22, 0.22] },
+    "firstperson_lefthand": { "rotation": [12, 155, 0], "translation": [-1, 1, 0], "scale": [0.22, 0.22, 0.22] },
+    "thirdperson_righthand": { "rotation": [18, 205, 0], "translation": [0, 1, 0], "scale": [0.36, 0.36, 0.36] },
+    "thirdperson_lefthand": { "rotation": [18, 155, 0], "translation": [0, 1, 0], "scale": [0.36, 0.36, 0.36] }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "targets": [
+    "flight_armor:aura_light_vanguard"
+  ],
+  "colored_light": {
+    "color": "#36F4FF",
+    "radius": 15,
+    "brightness": 0.9
+  }
+}

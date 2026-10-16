@@ -1,0 +1,301 @@
+{
+  "armor.assembly.recall_start": {
+    "sounds": ["flight_armor:armor/assembly/recall_start_01"]
+  },
+  "armor.assembly.inbound_light": {
+    "sounds": [
+      "flight_armor:armor/assembly/inbound_light_01",
+      "flight_armor:armor/assembly/inbound_light_02"
+    ]
+  },
+  "armor.assembly.inbound_medium": {
+    "sounds": [
+      "flight_armor:armor/assembly/inbound_medium_01",
+      "flight_armor:armor/assembly/inbound_medium_02"
+    ]
+  },
+  "armor.assembly.inbound_heavy": {
+    "sounds": [
+      "flight_armor:armor/assembly/inbound_heavy_01",
+      "flight_armor:armor/assembly/inbound_heavy_02"
+    ]
+  },
+  "armor.assembly.inbound_helmet": {
+    "sounds": ["flight_armor:armor/assembly/inbound_helmet_01"]
+  },
+  "armor.assembly.inbound_faceplate": {
+    "sounds": ["flight_armor:armor/assembly/inbound_faceplate_01"]
+  },
+  "armor.assembly.lock_boot": {
+    "sounds": [
+      "flight_armor:armor/assembly/lock_boot_01",
+      "flight_armor:armor/assembly/lock_boot_02"
+    ]
+  },
+  "armor.assembly.lock_limb": {
+    "sounds": [
+      "flight_armor:armor/assembly/lock_limb_01",
+      "flight_armor:armor/assembly/lock_limb_02"
+    ]
+  },
+  "armor.assembly.lock_torso": {
+    "sounds": [
+      "flight_armor:armor/assembly/lock_torso_01",
+      "flight_armor:armor/assembly/lock_torso_02"
+    ]
+  },
+  "armor.assembly.helmet_seal": {
+    "sounds": ["flight_armor:armor/assembly/helmet_seal_01"]
+  },
+  "armor.assembly.core_charge": {
+    "sounds": ["flight_armor:armor/assembly/core_charge_01"]
+  },
+  "armor.assembly.core_lock": {
+    "sounds": ["flight_armor:armor/assembly/core_lock_01"]
+  },
+  "armor.assembly.unlock_boot": {
+    "sounds": [
+      "flight_armor:armor/assembly/unlock_boot_01",
+      "flight_armor:armor/assembly/unlock_boot_02"
+    ]
+  },
+  "armor.assembly.unlock_limb": {
+    "sounds": [
+      "flight_armor:armor/assembly/unlock_limb_01",
+      "flight_armor:armor/assembly/unlock_limb_02"
+    ]
+  },
+  "armor.assembly.unlock_torso": {
+    "sounds": [
+      "flight_armor:armor/assembly/unlock_torso_01",
+      "flight_armor:armor/assembly/unlock_torso_02"
+    ]
+  },
+  "armor.assembly.retract_light": {
+    "sounds": [
+      "flight_armor:armor/assembly/retract_light_01",
+      "flight_armor:armor/assembly/retract_light_02"
+    ]
+  },
+  "armor.assembly.retract_medium": {
+    "sounds": [
+      "flight_armor:armor/assembly/retract_medium_01",
+      "flight_armor:armor/assembly/retract_medium_02"
+    ]
+  },
+  "armor.assembly.retract_heavy": {
+    "sounds": [
+      "flight_armor:armor/assembly/retract_heavy_01",
+      "flight_armor:armor/assembly/retract_heavy_02"
+    ]
+  },
+
+  "armor.core.wake": {
+    "sounds": ["flight_armor:armor/core/wake_01"]
+  },
+  "armor.core.online": {
+    "sounds": ["flight_armor:armor/core/online_01"]
+  },
+  "armor.core.idle_int": {
+    "sounds": [
+      "flight_armor:armor/core/idle_int_loop"
+    ]
+  },
+  "armor.core.idle_ext": {
+    "sounds": [
+      "flight_armor:armor/core/idle_ext_loop"
+    ]
+  },
+  "armor.core.shutdown": {
+    "sounds": ["flight_armor:armor/core/shutdown_01"]
+  },
+
+  "armor.flight.engage": {
+    "sounds": ["flight_armor:armor/flight/engage_01"]
+  },
+  "armor.flight.disengage": {
+    "sounds": ["flight_armor:armor/flight/disengage_01"]
+  },
+  "armor.flight.hover_int_loop": {
+    "sounds": [
+      "flight_armor:armor/flight/hover_int_loop"
+    ]
+  },
+  "armor.flight.hover_ext_loop": {
+    "sounds": [
+      "flight_armor:armor/flight/hover_ext_loop"
+    ]
+  },
+  "armor.flight.field_loop": {
+    "sounds": [
+      "flight_armor:armor/flight/field_loop"
+    ]
+  },
+  "armor.flight.air_int_loop": {
+    "sounds": [
+      "flight_armor:armor/flight/air_int_loop"
+    ]
+  },
+  "armor.flight.air_ext_loop": {
+    "sounds": [
+      "flight_armor:armor/flight/air_ext_loop"
+    ]
+  },
+  "armor.flight.boost_enter": {
+    "sounds": ["flight_armor:armor/flight/boost_enter_01"]
+  },
+  "armor.flight.boost_loop": {
+    "sounds": [
+      "flight_armor:armor/flight/boost_loop"
+    ]
+  },
+  "armor.flight.boost_release": {
+    "sounds": ["flight_armor:armor/flight/boost_release_01"]
+  },
+  "armor.flight.dive_enter": {
+    "sounds": ["flight_armor:armor/flight/dive_enter_01"]
+  },
+  "armor.flight.dive_loop": {
+    "sounds": [
+      "flight_armor:armor/flight/dive_loop"
+    ]
+  },
+  "armor.flight.dive_recover": {
+    "sounds": ["flight_armor:armor/flight/dive_recover_01"]
+  },
+  "armor.flight.land_soft": {
+    "sounds": ["flight_armor:armor/flight/land_soft_01"]
+  },
+  "armor.flight.land_hard": {
+    "sounds": ["flight_armor:armor/flight/land_hard_01"]
+  },
+  "armor.flight.flyby": {
+    "sounds": ["flight_armor:armor/flight/flyby_01"]
+  },
+  "armor.flight.sonic_internal": {
+    "subtitle": "subtitles.flight_armor.flight.sonic_boom",
+    "sounds": ["flight_armor:armor/flight/sonic_internal_01"]
+  },
+  "armor.flight.sonic_external": {
+    "subtitle": "subtitles.flight_armor.flight.sonic_boom",
+    "sounds": [
+      {
+        "name": "flight_armor:armor/flight/sonic_internal_01",
+        "volume": 0.62,
+        "pitch": 0.88
+      }
+    ]
+  },
+
+  "armor.underwater.hover_loop": {
+    "sounds": [
+      "flight_armor:armor/underwater/hover_loop"
+    ]
+  },
+  "armor.underwater.field_loop": {
+    "sounds": [
+      "flight_armor:armor/underwater/field_loop"
+    ]
+  },
+  "armor.underwater.boost_enter": {
+    "sounds": ["flight_armor:armor/underwater/boost_enter_01"]
+  },
+  "armor.underwater.dive_loop": {
+    "sounds": [
+      "flight_armor:armor/underwater/dive_loop"
+    ]
+  },
+
+  "armor.weapon.wrist_pulse_fire_ext": {
+    "subtitle": "subtitles.flight_armor.weapon.wrist_pulse_fire",
+    "sounds": [
+      "flight_armor:armor/weapon/wrist_pulse_fire_ext"
+    ]
+  },
+  "armor.weapon.wrist_pulse_fire_int": {
+    "subtitle": "subtitles.flight_armor.weapon.wrist_pulse_fire",
+    "sounds": [
+      "flight_armor:armor/weapon/wrist_pulse_fire_int"
+    ]
+  },
+  "armor.weapon.wrist_pulse_impact": {
+    "subtitle": "subtitles.flight_armor.weapon.wrist_pulse_impact",
+    "sounds": [
+      "flight_armor:armor/weapon/wrist_pulse_impact"
+    ]
+  },
+  "armor.weapon.core_charge_int_loop": {
+    "subtitle": "subtitles.flight_armor.weapon.core_charge",
+    "sounds": ["flight_armor:armor/weapon/core_charge_int_loop"]
+  },
+  "armor.weapon.core_charge_ext_loop": {
+    "subtitle": "subtitles.flight_armor.weapon.core_charge",
+    "sounds": ["flight_armor:armor/weapon/core_charge_ext_loop"]
+  },
+  "armor.weapon.core_release_int": {
+    "subtitle": "subtitles.flight_armor.weapon.core_release",
+    "sounds": ["flight_armor:armor/weapon/core_release_int"]
+  },
+  "armor.weapon.core_release_ext": {
+    "subtitle": "subtitles.flight_armor.weapon.core_release",
+    "sounds": ["flight_armor:armor/weapon/core_release_ext"]
+  },
+  "armor.weapon.core_cancel": {
+    "subtitle": "subtitles.flight_armor.weapon.core_cancel",
+    "sounds": ["flight_armor:armor/weapon/core_cancel"]
+  },
+  "armor.weapon.core_impact": {
+    "subtitle": "subtitles.flight_armor.weapon.core_impact",
+    "sounds": ["flight_armor:armor/weapon/core_impact"]
+  },
+  "armor.weapon.gravity_impact_int": {
+    "subtitle": "subtitles.flight_armor.weapon.gravity_impact",
+    "sounds": ["flight_armor:armor/weapon/gravity_impact_int"]
+  },
+  "armor.weapon.gravity_impact_ext": {
+    "subtitle": "subtitles.flight_armor.weapon.gravity_impact",
+    "sounds": ["flight_armor:armor/weapon/gravity_impact_ext"]
+  },
+  "armor.weapon.explosion_light": {
+    "subtitle": "subtitles.flight_armor.weapon.explosion_light",
+    "sounds": [
+      {
+        "name": "flight_armor:armor/weapon/gravity_impact_ext",
+        "volume": 0.48,
+        "pitch": 1.08
+      }
+    ]
+  },
+  "armor.weapon.blade_deploy_int": {
+    "subtitle": "subtitles.flight_armor.weapon.blade_deploy",
+    "sounds": ["flight_armor:armor/weapon/blade_deploy_int"]
+  },
+  "armor.weapon.blade_deploy_ext": {
+    "subtitle": "subtitles.flight_armor.weapon.blade_deploy",
+    "sounds": ["flight_armor:armor/weapon/blade_deploy_ext"]
+  },
+  "armor.weapon.blade_retract_int": {
+    "subtitle": "subtitles.flight_armor.weapon.blade_retract",
+    "sounds": ["flight_armor:armor/weapon/blade_retract_int"]
+  },
+  "armor.weapon.blade_retract_ext": {
+    "subtitle": "subtitles.flight_armor.weapon.blade_retract",
+    "sounds": ["flight_armor:armor/weapon/blade_retract_ext"]
+  },
+  "armor.weapon.blade_hum_int": {
+    "subtitle": "subtitles.flight_armor.weapon.blade_hum",
+    "sounds": ["flight_armor:armor/weapon/blade_hum_int_loop"]
+  },
+  "armor.weapon.blade_hum_ext": {
+    "subtitle": "subtitles.flight_armor.weapon.blade_hum",
+    "sounds": ["flight_armor:armor/weapon/blade_hum_ext_loop"]
+  },
+  "armor.weapon.blade_slash_int": {
+    "subtitle": "subtitles.flight_armor.weapon.blade_slash",
+    "sounds": ["flight_armor:armor/weapon/blade_slash_int"]
+  },
+  "armor.weapon.blade_slash_ext": {
+    "subtitle": "subtitles.flight_armor.weapon.blade_slash",
+    "sounds": ["flight_armor:armor/weapon/blade_slash_ext"]
+  }
+}

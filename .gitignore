@@ -1,0 +1,69 @@
+# gradle
+
+.gradle/
+.gradle-user-home*/
+.gradle-speed-build/
+build/
+out/
+classes/
+
+# eclipse
+
+*.launch
+
+# idea
+
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# vscode
+
+.settings/
+.vscode/
+bin/
+.classpath
+.project
+
+# macos
+
+*.DS_Store
+
+# fabric
+# 本地测试客户端的世界/日志（每次跑 runClient 都会生成上百 MB）
+
+run/
+
+# java
+
+hs_err_*.log
+replay_*.log
+*.hprof
+*.jfr
+
+# 本地构建通道的缓存与临时产物
+
+.codex-gradle-home*/
+.codex-javac-out/
+.gradle-lane/
+.inspect-playeranim/
+.tmp/
+
+# 本地代理工作区（工程记忆与临时工具，不随仓库分发）
+
+.workbuddy/
+
+# 日志与编译期碎片
+
+logs/
+javac.*.args
+
+# python
+
+__pycache__/
+*.pyc
+
+# 外部参考仓库
+
+dev/kosmx/
