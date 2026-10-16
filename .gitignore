@@ -67,3 +67,7 @@ __pycache__/
 # 外部参考仓库
 
 dev/kosmx/
+
+# Blender 自动备份（上一版 .blend 的影子文件，不需要进仓库）
+
+*.blend1
