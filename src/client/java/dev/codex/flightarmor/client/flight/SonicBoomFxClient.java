@@ -39,10 +39,30 @@ public final class SonicBoomFxClient {
 	private static final int MAX_ACTIVE_EVENTS = 48;
 	private static final int FULL_SEGMENTS = 28;
 	private static final int FAST_SEGMENTS = 16;
+	private static final double[] FULL_COS = buildCosTable(FULL_SEGMENTS);
+	private static final double[] FULL_SIN = buildSinTable(FULL_SEGMENTS);
+	private static final double[] FAST_COS = buildCosTable(FAST_SEGMENTS);
+	private static final double[] FAST_SIN = buildSinTable(FAST_SEGMENTS);
 	private static final Map<EventKey, ActiveEvent> EVENTS = new LinkedHashMap<>();
 	private static boolean initialized;
 
 	private SonicBoomFxClient() {
+	}
+
+	private static double[] buildCosTable(int segments) {
+		double[] table = new double[segments + 1];
+		for (int i = 0; i <= segments; i++) {
+			table[i] = Math.cos(Math.PI * 2.0D * i / segments);
+		}
+		return table;
+	}
+
+	private static double[] buildSinTable(int segments) {
+		double[] table = new double[segments + 1];
+		for (int i = 0; i <= segments; i++) {
+			table[i] = Math.sin(Math.PI * 2.0D * i / segments);
+		}
+		return table;
 	}
 
 	public static void initialize() {
@@ -125,8 +145,14 @@ public final class SonicBoomFxClient {
 		double length = SonicBoomVisualProfile.pressureConeLength(progress);
 		int sections = segments >= FULL_SEGMENTS ? 6 : 4;
 		double lifeFade = 1.0D - smoothstep(0.48D, 1.0D, progress);
-		int outerAlpha = alpha(42.0D * lifeFade * alphaScale);
-		int edgeAlpha = alpha(82.0D * lifeFade * alphaScale);
+		Rgba outerColor = new Rgba(174, 232, 255, alpha(42.0D * lifeFade * alphaScale));
+		Rgba edgeColor = new Rgba(174, 232, 255, alpha(82.0D * lifeFade * alphaScale));
+		double[] cosTable = segments == FULL_SEGMENTS ? FULL_COS : FAST_COS;
+		double[] sinTable = segments == FULL_SEGMENTS ? FULL_SIN : FAST_SIN;
+		Vec3[] radials = new Vec3[segments + 1];
+		for (int segment = 0; segment <= segments; segment++) {
+			radials[segment] = event.right.scale(cosTable[segment]).add(event.up.scale(sinTable[segment]));
+		}
 		for (int section = 0; section < sections; section++) {
 			double t0 = section / (double) sections;
 			double t1 = (section + 1.0D) / sections;
@@ -136,18 +162,15 @@ public final class SonicBoomFxClient {
 			double radius1 = SonicBoomVisualProfile.pressureConeRadius(axial1, event.mach);
 			Vec3 center0 = event.origin.add(event.axis.scale(axial0));
 			Vec3 center1 = event.origin.add(event.axis.scale(axial1));
+			Rgba quadColor = (section == 0 || section == sections - 1) ? edgeColor : outerColor;
 			for (int segment = 0; segment < segments; segment++) {
-				double a0 = Math.PI * 2.0D * segment / segments;
-				double a1 = Math.PI * 2.0D * (segment + 1.0D) / segments;
-				Vec3 radial0 = radial(event, a0);
-				Vec3 radial1 = radial(event, a1);
+				Vec3 radial0 = radials[segment];
+				Vec3 radial1 = radials[segment + 1];
 				Vec3 v0 = center0.add(radial0.scale(radius0));
 				Vec3 v1 = center0.add(radial1.scale(radius0));
 				Vec3 v2 = center1.add(radial1.scale(radius1));
 				Vec3 v3 = center1.add(radial0.scale(radius1));
-				int a = (section == 0 || section == sections - 1) ? edgeAlpha : outerAlpha;
-				emitQuad(vertices, camera, v0, v1, v2, v3,
-						new Rgba(174, 232, 255, a), localFirstPerson);
+				emitQuad(vertices, camera, v0, v1, v2, v3, quadColor, localFirstPerson);
 			}
 		}
 	}
@@ -195,16 +218,16 @@ public final class SonicBoomFxClient {
 			Rgba color, int segments, boolean localFirstPerson, boolean brokenCloud) {
 		double innerRadius = Math.max(0.02D, radius - width * 0.5D);
 		double outerRadius = radius + width * 0.5D;
+		double[] cosTable = segments == FULL_SEGMENTS ? FULL_COS : FAST_COS;
+		double[] sinTable = segments == FULL_SEGMENTS ? FULL_SIN : FAST_SIN;
 		for (int segment = 0; segment < segments; segment++) {
 			if (brokenCloud && Math.floorMod(segment * 5 + (int) (radius * 13.0D), 11) < 3) continue;
 			double wobble0 = brokenCloud ? 1.0D
 					+ Math.sin(segment * 2.37D + radius * 3.1D) * 0.08D : 1.0D;
 			double wobble1 = brokenCloud ? 1.0D
 					+ Math.sin((segment + 1.0D) * 2.37D + radius * 3.1D) * 0.08D : 1.0D;
-			double a0 = Math.PI * 2.0D * segment / segments;
-			double a1 = Math.PI * 2.0D * (segment + 1.0D) / segments;
-			Vec3 radial0 = radial(event, a0);
-			Vec3 radial1 = radial(event, a1);
+			Vec3 radial0 = event.right.scale(cosTable[segment]).add(event.up.scale(sinTable[segment]));
+			Vec3 radial1 = event.right.scale(cosTable[segment + 1]).add(event.up.scale(sinTable[segment + 1]));
 			Vec3 v0 = center.add(radial0.scale(innerRadius * wobble0));
 			Vec3 v1 = center.add(radial0.scale(outerRadius * wobble0));
 			Vec3 v2 = center.add(radial1.scale(outerRadius * wobble1));
@@ -213,17 +236,13 @@ public final class SonicBoomFxClient {
 		}
 	}
 
-	private static Vec3 radial(ActiveEvent event, double angle) {
-		return event.right.scale(Math.cos(angle)).add(event.up.scale(Math.sin(angle)));
-	}
-
 	private static void emitQuad(VertexConsumer vertices, Vec3 camera,
 			Vec3 v0, Vec3 v1, Vec3 v2, Vec3 v3, Rgba color,
 			boolean localFirstPerson) {
-		if (!safe(v0, camera, localFirstPerson)
-				|| !safe(v1, camera, localFirstPerson)
-				|| !safe(v2, camera, localFirstPerson)
-				|| !safe(v3, camera, localFirstPerson)) return;
+		if (localFirstPerson && (!safe(v0, camera, true)
+				|| !safe(v1, camera, true)
+				|| !safe(v2, camera, true)
+				|| !safe(v3, camera, true))) return;
 		emit(vertices, camera, v0, color);
 		emit(vertices, camera, v1, color);
 		emit(vertices, camera, v2, color);
@@ -231,8 +250,9 @@ public final class SonicBoomFxClient {
 	}
 
 	private static boolean safe(Vec3 vertex, Vec3 camera, boolean localFirstPerson) {
+		if (!localFirstPerson) return true;
 		return SonicBoomVisualProfile.outsideCameraGap(
-				Math.sqrt(vertex.distanceToSqr(camera)), localFirstPerson);
+				Math.sqrt(vertex.distanceToSqr(camera)), true);
 	}
 
 	private static void emit(VertexConsumer vertices, Vec3 camera, Vec3 value, Rgba color) {

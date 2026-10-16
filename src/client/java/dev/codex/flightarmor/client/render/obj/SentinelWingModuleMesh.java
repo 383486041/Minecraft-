@@ -44,14 +44,22 @@ public final class SentinelWingModuleMesh {
 
 	private static final ArmorObjMesh.Color SHELL =
 			new ArmorObjMesh.Color(96, 113, 126, 255);
+	private static final ArmorObjMesh.Color SENTINEL_GOLD =
+			new ArmorObjMesh.Color(238, 188, 54, 255);
+	private static final ArmorObjMesh.Color SENTINEL_CHAMPAGNE =
+			new ArmorObjMesh.Color(242, 238, 228, 255);
+	private static final ArmorObjMesh.Color SENTINEL_BRONZE =
+			new ArmorObjMesh.Color(178, 42, 44, 255);
 	private static final ArmorObjMesh.Color FRAME =
-			new ArmorObjMesh.Color(29, 38, 46, 255);
+			new ArmorObjMesh.Color(46, 42, 38, 255);
 	private static final ArmorObjMesh.Color CYAN =
 			new ArmorObjMesh.Color(48, 236, 255, 255);
 	private static final ArmorObjMesh.Color BLUE =
 			new ArmorObjMesh.Color(58, 148, 255, 255);
 	private static final ArmorObjMesh.Color VIOLET =
 			new ArmorObjMesh.Color(190, 76, 255, 255);
+	private static final ArmorObjMesh.Color AMBER =
+			new ArmorObjMesh.Color(255, 192, 54, 255);
 	private static final ArmorObjMesh.Color WHITE =
 			new ArmorObjMesh.Color(238, 252, 255, 255);
 
@@ -87,7 +95,7 @@ public final class SentinelWingModuleMesh {
 			applyEntityLocalFrame(poses, left, fold);
 			applyModuleArticulation(poses, group, name, left, fold);
 			mesh.render(group, poses.last(), shell, packedLight,
-					isDark(name) ? FRAME : SHELL);
+					shellColor(name));
 			poses.popPose();
 		}
 
@@ -219,9 +227,25 @@ public final class SentinelWingModuleMesh {
 				|| name.contains("barrel") || name.contains("dark");
 	}
 
+	private static ArmorObjMesh.Color shellColor(String name) {
+		if (isDark(name)) {
+			return FRAME;
+		}
+		if (name.contains("cannon_housing") || name.contains("drone_pod_shell")) {
+			return SENTINEL_BRONZE;
+		}
+		if (name.contains("wing_tip_shell")) {
+			return SENTINEL_CHAMPAGNE;
+		}
+		if (name.contains("wing_secondary_shell")) {
+			return SENTINEL_GOLD;
+		}
+		return SHELL;
+	}
+
 	private static ArmorObjMesh.Color emissiveColor(String name, float pulse) {
 		ArmorObjMesh.Color base = name.contains("wing_cannon_muzzle") ? WHITE
-				: name.contains("wing_tip_node") ? VIOLET
+				: name.contains("wing_tip_node") ? AMBER
 				: name.contains("wing_secondary_node") ? VIOLET
 				: name.contains("drone_pod_status") ? CYAN : BLUE;
 		return mix(base, WHITE, 0.10F + pulse * 0.42F);

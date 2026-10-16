@@ -14,7 +14,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/** 按玩家保存并平滑计算悬空、方向移动和俯冲四肢姿态。 */
+/**
+ * 按玩家保存并平滑计算高达风格悬空待机、全向推进、逆喷射急停和高速俯冲四肢姿态。
+ */
 public final class FlightPoseController {
 	private static final Map<UUID, SmoothedPose> POSES = new HashMap<>();
 
@@ -64,6 +66,7 @@ public final class FlightPoseController {
 		}
 		return motionInput(player);
 	}
+
 	private static Input motionInput(Player player) {
 		Vec3 velocity = player.getDeltaMovement();
 		float yaw = player.getYRot() * Mth.DEG_TO_RAD;
@@ -79,7 +82,7 @@ public final class FlightPoseController {
 
 	private static FlightPoseFrame targetPose(Input input, boolean diving,
 			float animationTime, float personalPhase, ArmorVariant variant) {
-		if (diving) return stylePose(divePose(), variant, MotionBeat.DIVE);
+		if (diving) return stylePose(divePose(animationTime, personalPhase), variant, MotionBeat.DIVE);
 
 		float forward = Math.max(0.0F, input.forward);
 		float backward = Math.max(0.0F, -input.forward);
@@ -92,7 +95,7 @@ public final class FlightPoseController {
 
 		FlightPoseFrame pose = stylePose(hoverPose(animationTime, personalPhase, 1.0F - activity),
 				variant, MotionBeat.HOVER);
-		pose = pose.lerp(stylePose(forwardPose(), variant, MotionBeat.FORWARD), eased(forward));
+		pose = pose.lerp(stylePose(forwardPose(animationTime, personalPhase), variant, MotionBeat.FORWARD), eased(forward));
 		pose = pose.lerp(stylePose(backwardPose(), variant, MotionBeat.BACKWARD), eased(backward));
 		pose = pose.lerp(stylePose(leftStrafePose(), variant, MotionBeat.STRAFE), eased(left));
 		pose = pose.lerp(stylePose(rightStrafePose(), variant, MotionBeat.STRAFE), eased(right));
@@ -101,87 +104,107 @@ public final class FlightPoseController {
 		return pose;
 	}
 
+	/**
+	 * 高达经典空中待机立姿（Gundam Aerial Seed Stand）：
+	 * 胸膛微挺、下颌微收（从 V 字天线下方凝视前方），双臂微曲自然外展，
+	 * 左膝高抬弯曲、右腿向后下方舒展，配合零重力微幅呼吸起伏。
+	 */
 	private static FlightPoseFrame hoverPose(float time, float phase, float idleWeight) {
-		float leftBalance = Mth.sin(time * 0.105F + phase) * 2.2F * idleWeight;
-		float rightBalance = Mth.sin(time * 0.127F + phase + 1.83F) * 1.8F * idleWeight;
+		float breath = Mth.sin(time * 0.095F + phase) * idleWeight;
+		float secondary = Mth.sin(time * 0.135F + phase + 1.57F) * idleWeight;
 		return frame(
-				0.0F, 0.0F, 2.0F, 0.0F,
-				-9.0F + leftBalance, -7.0F, -13.0F,
-				-4.0F + rightBalance, 6.0F, 10.0F,
-				-17.0F, -3.0F, -5.0F,
-				-7.0F, 3.0F, 4.0F,
-				28.0F + leftBalance * 0.35F, 20.0F - rightBalance * 0.28F,
-				43.0F, 29.0F);
+				-3.5F + breath * 1.2F, secondary * 1.1F, 4.5F - breath * 1.0F, -secondary * 0.8F,
+				-14.0F + breath * 2.6F, -9.0F, -16.0F - breath * 1.5F,
+				-8.0F + secondary * 2.2F, 8.0F, 14.0F + secondary * 1.4F,
+				-26.0F + breath * 2.0F, -4.5F, -6.5F,
+				-6.0F - breath * 1.4F, 4.0F, 5.5F,
+				34.0F + breath * 2.5F, 26.0F - secondary * 2.0F,
+				56.0F + breath * 3.0F, 22.0F - secondary * 1.8F);
 	}
 
-	private static FlightPoseFrame forwardPose() {
+	/**
+	 * 高达推进突进姿态：躯干前倾破风、头部微抬保持平视，双臂向斜后方收拢导流，
+	 * 前导腿屈膝稳住重心、后掠腿延伸推进线。
+	 */
+	private static FlightPoseFrame forwardPose(float time, float phase) {
+		float micro = Mth.sin(time * 0.22F + phase) * 1.2F;
 		return frame(
-				-7.0F, 0.0F, 8.0F, 0.0F,
-				6.0F, -5.0F, -8.0F,
-				10.0F, 4.0F, 7.0F,
-				-7.0F, -2.0F, -3.0F,
-				1.0F, 2.0F, 3.0F,
-				18.0F, 12.0F, 26.0F, 18.0F);
+				-14.0F, 0.0F, 12.0F, 0.0F,
+				18.0F + micro, -6.0F, -12.0F,
+				22.0F - micro, 6.0F, 11.0F,
+				-14.0F, -3.0F, -4.0F,
+				12.0F, 3.0F, 4.0F,
+				24.0F, 18.0F, 42.0F, 16.0F);
 	}
 
+	/**
+	 * 高达逆喷射急停/后退姿态：上身后仰、收颌，双臂前推平衡力矩，
+	 * 双膝前屈将小腿与脚底推进喷口朝向正前方制动。
+	 */
 	private static FlightPoseFrame backwardPose() {
 		return frame(
-				3.0F, 0.0F, -3.0F, 0.0F,
-				-15.0F, -8.0F, -16.0F,
-				-8.0F, 7.0F, 12.0F,
-				-25.0F, -4.0F, -6.0F,
-				-13.0F, 4.0F, 5.0F,
-				34.0F, 23.0F, 55.0F, 36.0F);
+				8.0F, 0.0F, -6.0F, 0.0F,
+				-24.0F, -10.0F, -20.0F,
+				-18.0F, 9.0F, 18.0F,
+				-34.0F, -5.0F, -7.0F,
+				-22.0F, 5.0F, 6.0F,
+				42.0F, 32.0F, 66.0F, 46.0F);
 	}
 
+	/** 左向高机动横滑：机身向内侧倾转，外侧腿蓄力蹬出、内侧腿高抬屈膝。 */
 	private static FlightPoseFrame leftStrafePose() {
 		return frame(
-				-2.0F, 0.0F, 3.0F, 0.0F,
-				-18.0F, -15.0F, -20.0F,
-				3.0F, 9.0F, 7.0F,
-				-5.0F, -2.0F, -3.0F,
-				-58.0F, 7.0F, 9.0F,
-				37.0F, 16.0F, 16.0F, 72.0F);
+				-5.0F, -8.0F, 4.0F, 5.0F,
+				-24.0F, -18.0F, -24.0F,
+				8.0F, 12.0F, 11.0F,
+				-10.0F, -4.0F, -6.0F,
+				-58.0F, 8.0F, 11.0F,
+				42.0F, 20.0F, 22.0F, 76.0F);
 	}
 
+	/** 右向高机动横滑：镜像的高机动侧倾切线姿态。 */
 	private static FlightPoseFrame rightStrafePose() {
 		return frame(
-				-2.0F, 0.0F, 3.0F, 0.0F,
-				2.0F, -8.0F, -7.0F,
-				-17.0F, 14.0F, 19.0F,
-				-57.0F, -7.0F, -9.0F,
-				-4.0F, 2.0F, 3.0F,
-				17.0F, 36.0F, 70.0F, 15.0F);
+				-5.0F, 8.0F, 4.0F, -5.0F,
+				8.0F, -12.0F, -11.0F,
+				-24.0F, 18.0F, 24.0F,
+				-58.0F, -8.0F, -11.0F,
+				-10.0F, 4.0F, 6.0F,
+				20.0F, 42.0F, 76.0F, 22.0F);
 	}
 
+	/** 垂直拔升：胸膛昂起、抬头望向天顶，双臂向两侧后下方张开导流，左膝高提。 */
 	private static FlightPoseFrame ascendPose() {
 		return frame(
-				2.0F, 0.0F, -5.0F, 0.0F,
-				-13.0F, -8.0F, -16.0F,
-				-7.0F, 7.0F, 13.0F,
-				-23.0F, -3.0F, -5.0F,
-				-12.0F, 3.0F, 5.0F,
-				32.0F, 21.0F, 49.0F, 34.0F);
+				-6.0F, 0.0F, -10.0F, 0.0F,
+				-18.0F, -11.0F, -22.0F,
+				-12.0F, 10.0F, 19.0F,
+				-30.0F, -4.0F, -6.0F,
+				-10.0F, 4.0F, 5.0F,
+				38.0F, 28.0F, 62.0F, 28.0F);
 	}
 
+	/** 战术急降：重心下沉、双臂向斜外侧展开维持稳定翼面。 */
 	private static FlightPoseFrame descendPose() {
 		return frame(
-				0.0F, 0.0F, 4.0F, 0.0F,
-				4.0F, -8.0F, -25.0F,
-				9.0F, 8.0F, 23.0F,
-				-5.0F, -5.0F, -5.0F,
-				3.0F, 5.0F, 5.0F,
-				16.0F, 11.0F, 23.0F, 15.0F);
+				-4.0F, 0.0F, 8.0F, 0.0F,
+				8.0F, -10.0F, -28.0F,
+				12.0F, 10.0F, 26.0F,
+				-14.0F, -5.0F, -6.0F,
+				-4.0F, 5.0F, 6.0F,
+				24.0F, 18.0F, 36.0F, 22.0F);
 	}
 
-	private static FlightPoseFrame divePose() {
+	/** 高速俯冲突防：全身收束为破空箭形。 */
+	private static FlightPoseFrame divePose(float time, float phase) {
+		float vib = Mth.sin(time * 0.45F + phase) * 0.8F;
 		return frame(
-				-12.0F, 0.0F, 7.0F, 0.0F,
-				27.0F, -3.0F, -5.0F,
-				24.0F, 3.0F, 5.0F,
-				10.0F, -1.0F, -2.0F,
-				15.0F, 1.0F, 2.0F,
-				-48.0F, -52.0F, 8.0F, 11.0F);
+				-18.0F, 0.0F, 11.0F, 0.0F,
+				32.0F + vib, -4.0F, -7.0F,
+				29.0F - vib, 4.0F, 7.0F,
+				14.0F, -2.0F, -3.0F,
+				18.0F, 2.0F, 3.0F,
+				-46.0F, -50.0F, 12.0F, 15.0F);
 	}
 
 	private static FlightPoseFrame frame(
@@ -206,30 +229,30 @@ public final class FlightPoseController {
 		if (variant == ArmorVariant.SWIFT) {
 			float stream = beat == MotionBeat.FORWARD || beat == MotionBeat.DIVE ? 1.0F : 0.0F;
 			return new FlightPoseFrame(
-					pose.bodyPitch() + degrees(-4.0F * stream), pose.bodyRoll() * 0.55F,
-					pose.headPitchOffset() + degrees(2.0F * stream), pose.headRollOffset() * 0.60F,
-					pose.leftArmPitch() + degrees(5.0F * stream), pose.leftArmYaw() * 0.72F,
-					pose.leftArmRoll() * 0.68F,
-					pose.rightArmPitch() + degrees(8.0F * stream), pose.rightArmYaw() * 0.72F,
-					pose.rightArmRoll() * 0.68F,
-					pose.leftLegPitch() + degrees(5.0F * stream), pose.leftLegYaw() * 0.58F,
-					pose.leftLegRoll() * 0.55F,
-					pose.rightLegPitch() + degrees(2.0F * stream), pose.rightLegYaw() * 0.58F,
-					pose.rightLegRoll() * 0.55F,
-					pose.leftElbowBend() * 0.78F, pose.rightElbowBend() * 0.72F,
-					pose.leftKneeBend() * 0.76F, pose.rightKneeBend() * 0.70F);
+					pose.bodyPitch() + degrees(-5.0F * stream), pose.bodyRoll() * 0.72F,
+					pose.headPitchOffset() + degrees(3.5F * stream), pose.headRollOffset() * 0.70F,
+					pose.leftArmPitch() + degrees(7.0F * stream), pose.leftArmYaw() * 0.75F,
+					pose.leftArmRoll() * 0.72F,
+					pose.rightArmPitch() + degrees(9.0F * stream), pose.rightArmYaw() * 0.75F,
+					pose.rightArmRoll() * 0.72F,
+					pose.leftLegPitch() + degrees(6.0F * stream), pose.leftLegYaw() * 0.65F,
+					pose.leftLegRoll() * 0.62F,
+					pose.rightLegPitch() + degrees(3.0F * stream), pose.rightLegYaw() * 0.65F,
+					pose.rightLegRoll() * 0.62F,
+					pose.leftElbowBend() * 0.82F, pose.rightElbowBend() * 0.78F,
+					pose.leftKneeBend() * 0.80F, pose.rightKneeBend() * 0.74F);
 		}
-		float brace = beat == MotionBeat.HOVER || beat == MotionBeat.ASCEND ? 1.0F : 0.55F;
+		float brace = beat == MotionBeat.HOVER || beat == MotionBeat.ASCEND ? 1.0F : 0.60F;
 		return new FlightPoseFrame(
-				pose.bodyPitch() * 0.62F, pose.bodyRoll() * 0.42F,
-				pose.headPitchOffset() * 0.72F, pose.headRollOffset() * 0.45F,
-				pose.leftArmPitch() - degrees(5.0F * brace), pose.leftArmYaw() * 1.18F,
+				pose.bodyPitch() * 0.68F, pose.bodyRoll() * 0.50F,
+				pose.headPitchOffset() * 0.78F, pose.headRollOffset() * 0.52F,
+				pose.leftArmPitch() - degrees(6.0F * brace), pose.leftArmYaw() * 1.20F,
 				pose.leftArmRoll() * 1.28F,
-				pose.rightArmPitch() - degrees(3.0F * brace), pose.rightArmYaw() * 1.18F,
+				pose.rightArmPitch() - degrees(4.0F * brace), pose.rightArmYaw() * 1.20F,
 				pose.rightArmRoll() * 1.28F,
-				pose.leftLegPitch() - degrees(4.0F * brace), pose.leftLegYaw() * 1.26F,
+				pose.leftLegPitch() - degrees(5.0F * brace), pose.leftLegYaw() * 1.26F,
 				pose.leftLegRoll() * 1.24F,
-				pose.rightLegPitch() - degrees(2.0F * brace), pose.rightLegYaw() * 1.26F,
+				pose.rightLegPitch() - degrees(3.0F * brace), pose.rightLegYaw() * 1.26F,
 				pose.rightLegRoll() * 1.24F,
 				pose.leftElbowBend() + degrees(12.0F * brace),
 				pose.rightElbowBend() + degrees(10.0F * brace),
@@ -240,10 +263,12 @@ public final class FlightPoseController {
 	private enum MotionBeat {
 		HOVER, FORWARD, BACKWARD, STRAFE, ASCEND, DESCEND, DIVE
 	}
+
 	private static float eased(float value) {
 		float clamped = Mth.clamp(value, 0.0F, 1.0F);
 		return clamped * clamped * (3.0F - 2.0F * clamped);
 	}
+
 	private static float degrees(float degrees) {
 		return degrees * Mth.DEG_TO_RAD;
 	}
@@ -298,7 +323,7 @@ public final class FlightPoseController {
 				return;
 			}
 			previous = current;
-			current = current.lerp(target, active ? 0.28F : 0.18F);
+			current = current.lerp(target, active ? 0.30F : 0.20F);
 		}
 	}
 }

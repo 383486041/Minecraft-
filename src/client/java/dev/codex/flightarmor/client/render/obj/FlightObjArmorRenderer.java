@@ -76,12 +76,32 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 	public static final ResourceLocation EMISSIVE_TEXTURE =
 			ResourceLocation.withDefaultNamespace("textures/misc/white.png");
 
-	private static final ArmorObjMesh.Color TITANIUM = new ArmorObjMesh.Color(166, 182, 190, 255);
-	private static final ArmorObjMesh.Color LIGHT_TITANIUM = new ArmorObjMesh.Color(198, 211, 216, 255);
-	private static final ArmorObjMesh.Color GUNMETAL = new ArmorObjMesh.Color(55, 70, 79, 255);
-	private static final ArmorObjMesh.Color SHADOW = new ArmorObjMesh.Color(24, 32, 38, 255);
-	private static final ArmorObjMesh.Color ACCENT = new ArmorObjMesh.Color(92, 115, 126, 255);
-	private static final ArmorObjMesh.Color VISOR = new ArmorObjMesh.Color(42, 73, 88, 255);
+	private static final ArmorObjMesh.Color TITANIUM = new ArmorObjMesh.Color(238, 242, 248, 255);
+	private static final ArmorObjMesh.Color LIGHT_TITANIUM = new ArmorObjMesh.Color(246, 198, 52, 255);
+	private static final ArmorObjMesh.Color GUNMETAL = new ArmorObjMesh.Color(46, 54, 66, 255);
+	private static final ArmorObjMesh.Color SHADOW = new ArmorObjMesh.Color(20, 24, 32, 255);
+	private static final ArmorObjMesh.Color ACCENT = new ArmorObjMesh.Color(36, 92, 186, 255);
+	private static final ArmorObjMesh.Color CRIMSON = new ArmorObjMesh.Color(212, 46, 52, 255);
+	private static final ArmorObjMesh.Color VISOR = new ArmorObjMesh.Color(42, 242, 196, 255);
+
+	private static final ArmorObjMesh.Color SWIFT_PRIMARY = new ArmorObjMesh.Color(230, 228, 242, 255);
+	private static final ArmorObjMesh.Color SWIFT_HIGHLIGHT = new ArmorObjMesh.Color(242, 202, 78, 255);
+	private static final ArmorObjMesh.Color SWIFT_ACCENT = new ArmorObjMesh.Color(72, 48, 148, 255);
+	private static final ArmorObjMesh.Color SWIFT_CRIMSON = new ArmorObjMesh.Color(196, 38, 112, 255);
+	private static final ArmorObjMesh.Color SWIFT_GUNMETAL = new ArmorObjMesh.Color(42, 36, 58, 255);
+	private static final ArmorObjMesh.Color SWIFT_SHADOW = new ArmorObjMesh.Color(18, 14, 28, 255);
+	private static final ArmorObjMesh.Color SWIFT_VISOR = new ArmorObjMesh.Color(236, 72, 255, 255);
+
+	private static final ArmorObjMesh.Color SENTINEL_PRIMARY = new ArmorObjMesh.Color(242, 238, 228, 255);
+	private static final ArmorObjMesh.Color SENTINEL_HIGHLIGHT = new ArmorObjMesh.Color(238, 188, 54, 255);
+	private static final ArmorObjMesh.Color SENTINEL_ACCENT = new ArmorObjMesh.Color(38, 52, 82, 255);
+	private static final ArmorObjMesh.Color SENTINEL_CRIMSON = new ArmorObjMesh.Color(178, 42, 44, 255);
+	private static final ArmorObjMesh.Color SENTINEL_GUNMETAL = new ArmorObjMesh.Color(46, 42, 38, 255);
+	private static final ArmorObjMesh.Color SENTINEL_SHADOW = new ArmorObjMesh.Color(20, 18, 16, 255);
+	private static final ArmorObjMesh.Color SENTINEL_VISOR = new ArmorObjMesh.Color(54, 244, 210, 255);
+
+	private static final java.util.Map<String, GroupBinding> BINDING_CACHE =
+			new java.util.concurrent.ConcurrentHashMap<>(256);
 	/** 在客户端初始化中调用；同时启用 F3+T OBJ 热重载。 */
 	public static void initialize() {
 		FlightArmorObjResources.registerReloadListener();
@@ -324,29 +344,29 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 			float phasingProgress, RecallApproachTimeline.Sample recallApproach, float deploymentFlight,
 			CruiseCombatStage combatStage, float combatStageProgress, ArmorVariant variant) {
 		FlightPoseFrame hoverPose = new FlightPoseFrame(
-				0.0F, 0.0F, 0.0F, 0.0F,
-				0.0F, 0.0F, 0.0F,
-				0.0F, 0.0F, 0.0F,
-				0.0F, 0.0F, 0.0F,
-				0.0F, 0.0F, 0.0F,
-				24.0F * Mth.DEG_TO_RAD, 16.0F * Mth.DEG_TO_RAD,
-				27.0F * Mth.DEG_TO_RAD, 11.0F * Mth.DEG_TO_RAD);
+				-3.5F * Mth.DEG_TO_RAD, 0.0F, 4.5F * Mth.DEG_TO_RAD, 0.0F,
+				-12.0F * Mth.DEG_TO_RAD, -8.0F * Mth.DEG_TO_RAD, -15.0F * Mth.DEG_TO_RAD,
+				-7.0F * Mth.DEG_TO_RAD, 7.0F * Mth.DEG_TO_RAD, 13.0F * Mth.DEG_TO_RAD,
+				-22.0F * Mth.DEG_TO_RAD, -4.0F * Mth.DEG_TO_RAD, -6.0F * Mth.DEG_TO_RAD,
+				-5.0F * Mth.DEG_TO_RAD, 4.0F * Mth.DEG_TO_RAD, 5.0F * Mth.DEG_TO_RAD,
+				32.0F * Mth.DEG_TO_RAD, 24.0F * Mth.DEG_TO_RAD,
+				52.0F * Mth.DEG_TO_RAD, 20.0F * Mth.DEG_TO_RAD);
 		FlightPoseFrame divePose = new FlightPoseFrame(
-				0.0F, 0.0F, 0.0F, 0.0F,
-				0.0F, 0.0F, 0.0F,
-				0.0F, 0.0F, 0.0F,
-				0.0F, 0.0F, 0.0F,
-				0.0F, 0.0F, 0.0F,
-				6.0F * Mth.DEG_TO_RAD, 5.0F * Mth.DEG_TO_RAD,
-				4.0F * Mth.DEG_TO_RAD, 3.0F * Mth.DEG_TO_RAD);
+				-12.0F * Mth.DEG_TO_RAD, 0.0F, 8.0F * Mth.DEG_TO_RAD, 0.0F,
+				24.0F * Mth.DEG_TO_RAD, -3.0F * Mth.DEG_TO_RAD, -6.0F * Mth.DEG_TO_RAD,
+				22.0F * Mth.DEG_TO_RAD, 3.0F * Mth.DEG_TO_RAD, 6.0F * Mth.DEG_TO_RAD,
+				10.0F * Mth.DEG_TO_RAD, -2.0F * Mth.DEG_TO_RAD, -3.0F * Mth.DEG_TO_RAD,
+				14.0F * Mth.DEG_TO_RAD, 2.0F * Mth.DEG_TO_RAD, 3.0F * Mth.DEG_TO_RAD,
+				10.0F * Mth.DEG_TO_RAD, 8.0F * Mth.DEG_TO_RAD,
+				12.0F * Mth.DEG_TO_RAD, 10.0F * Mth.DEG_TO_RAD);
 		FlightPoseFrame brakingPose = new FlightPoseFrame(
-				0.0F, 0.0F, 0.0F, 0.0F,
-				0.0F, 0.0F, 0.0F,
-				0.0F, 0.0F, 0.0F,
-				0.0F, 0.0F, 0.0F,
-				0.0F, 0.0F, 0.0F,
-				16.0F * Mth.DEG_TO_RAD, 13.0F * Mth.DEG_TO_RAD,
-				18.0F * Mth.DEG_TO_RAD, 10.0F * Mth.DEG_TO_RAD);
+				6.0F * Mth.DEG_TO_RAD, 0.0F, -4.0F * Mth.DEG_TO_RAD, 0.0F,
+				-20.0F * Mth.DEG_TO_RAD, -9.0F * Mth.DEG_TO_RAD, -18.0F * Mth.DEG_TO_RAD,
+				-15.0F * Mth.DEG_TO_RAD, 8.0F * Mth.DEG_TO_RAD, 16.0F * Mth.DEG_TO_RAD,
+				-30.0F * Mth.DEG_TO_RAD, -5.0F * Mth.DEG_TO_RAD, -6.0F * Mth.DEG_TO_RAD,
+				-18.0F * Mth.DEG_TO_RAD, 5.0F * Mth.DEG_TO_RAD, 6.0F * Mth.DEG_TO_RAD,
+				38.0F * Mth.DEG_TO_RAD, 28.0F * Mth.DEG_TO_RAD,
+				60.0F * Mth.DEG_TO_RAD, 42.0F * Mth.DEG_TO_RAD);
 		hoverPose = carrierStyle(hoverPose, variant, false);
 		divePose = carrierStyle(divePose, variant, true);
 		brakingPose = carrierStyle(brakingPose, variant, false);
@@ -777,45 +797,95 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 		if (open <= 0.0001F) return;
 
 		String name = group.name();
-		boolean rear = isRearArmorGroup(name);
+		boolean coaxial = group.coaxialShell();
+		boolean rear = group.rearGroup() || isRearArmorGroup(name);
 		float side = armorSide(name);
+		float clearanceArc = Mth.sin(Mth.clamp(open, 0.0F, 1.0F) * Mth.PI);
+		if (coaxial) {
+			// 360° 闭合环套/底衬不可向单一 -Z/+Z 轴平移（否则后壁会直接横穿玩家躯干或四肢），
+			// 而是沿肢体外侧径向展开并伴随环形扩张净空，闭合时贴着体表无穿模收束。
+			switch (binding.anchor()) {
+				case HEAD -> {
+					poseStack.translate(0.0F, -2.6F * open, 0.0F);
+					scaleAround(poseStack, group, 1.0F + 0.16F * open,
+							1.0F + 0.05F * open, 1.0F + 0.16F * open);
+				}
+				case BODY -> {
+					poseStack.translate(0.0F, -0.8F * open, 0.0F);
+					scaleAround(poseStack, group, 1.0F + 0.18F * open,
+							1.0F + 0.04F * open, 1.0F + 0.20F * open);
+				}
+				case LEFT_ARM -> {
+					poseStack.translate(7.4F * open, -1.0F * open, 0.0F);
+					rotateAround(poseStack, group, 0.0F, 0.0F, -14.0F * open);
+					scaleAround(poseStack, group, 1.0F + 0.12F * open,
+							1.0F + 0.02F * open, 1.0F + 0.12F * open);
+				}
+				case RIGHT_ARM -> {
+					poseStack.translate(-7.4F * open, -1.0F * open, 0.0F);
+					rotateAround(poseStack, group, 0.0F, 0.0F, 14.0F * open);
+					scaleAround(poseStack, group, 1.0F + 0.12F * open,
+							1.0F + 0.02F * open, 1.0F + 0.12F * open);
+				}
+				case LEFT_LEG -> {
+					poseStack.translate(5.0F * open, -0.6F * open, 0.0F);
+					rotateAround(poseStack, group, 0.0F, 0.0F, -10.0F * open);
+					scaleAround(poseStack, group, 1.0F + 0.12F * open,
+							1.0F + 0.02F * open, 1.0F + 0.12F * open);
+				}
+				case RIGHT_LEG -> {
+					poseStack.translate(-5.0F * open, -0.6F * open, 0.0F);
+					rotateAround(poseStack, group, 0.0F, 0.0F, 10.0F * open);
+					scaleAround(poseStack, group, 1.0F + 0.12F * open,
+							1.0F + 0.02F * open, 1.0F + 0.12F * open);
+				}
+			}
+			return;
+		}
+
 		switch (binding.anchor()) {
 			case HEAD -> {
-				float z = rear ? 6.2F : -6.8F;
-				float y = name.contains("crown") ? -3.8F : -1.2F;
-				poseStack.translate(side * 2.4F * open, y * open, z * open);
-				rotateAround(poseStack, group, (rear ? -16.0F : 18.0F) * open,
-						-side * 12.0F * open, side * 10.0F * open);
+				float z = (rear ? 5.8F : -6.2F) * open + (rear ? 0.9F : -0.9F) * clearanceArc;
+				float y = (name.contains("crown") ? -3.4F : -1.0F) * open;
+				poseStack.translate(side * 2.8F * open, y, z);
+				rotateAround(poseStack, group, (rear ? -14.0F : 16.0F) * open,
+						-side * 10.0F * open, side * 9.0F * open);
 			}
 			case BODY -> {
-				float z = rear ? 6.5F : -5.8F;
-				poseStack.translate(side * 4.8F * open, -1.2F * open, z * open);
-				rotateAround(poseStack, group, (rear ? -9.0F : 11.0F) * open,
-						-side * 15.0F * open, -side * 12.0F * open);
+				float z = (rear ? 6.2F : -5.6F) * open + (rear ? 1.1F : -1.1F) * clearanceArc;
+				poseStack.translate(side * 4.4F * open, -1.0F * open, z);
+				rotateAround(poseStack, group, (rear ? -8.0F : 10.0F) * open,
+						-side * 12.0F * open, -side * 10.0F * open);
 			}
 			case LEFT_ARM -> {
-				poseStack.translate(9.0F * open, -1.4F * open, (rear ? 4.2F : -4.0F) * open);
-				rotateAround(poseStack, group, 3.0F * open, -18.0F * open, -24.0F * open);
+				float z = (rear ? 3.4F : -3.2F) * open + (rear ? 0.6F : -0.6F) * clearanceArc;
+				poseStack.translate(8.4F * open + 0.8F * clearanceArc, -1.2F * open, z);
+				rotateAround(poseStack, group, 2.5F * open, -14.0F * open, -20.0F * open);
 			}
 			case RIGHT_ARM -> {
-				poseStack.translate(-9.0F * open, -1.4F * open, (rear ? 4.2F : -4.0F) * open);
-				rotateAround(poseStack, group, 3.0F * open, 18.0F * open, 24.0F * open);
+				float z = (rear ? 3.4F : -3.2F) * open + (rear ? 0.6F : -0.6F) * clearanceArc;
+				poseStack.translate(-8.4F * open - 0.8F * clearanceArc, -1.2F * open, z);
+				rotateAround(poseStack, group, 2.5F * open, 14.0F * open, 20.0F * open);
 			}
 			case LEFT_LEG -> {
-				poseStack.translate(6.2F * open, -0.8F * open, (rear ? 3.6F : -3.4F) * open);
-				rotateAround(poseStack, group, 2.0F * open, -12.0F * open, -15.0F * open);
+				float z = (rear ? 3.0F : -2.8F) * open + (rear ? 0.5F : -0.5F) * clearanceArc;
+				poseStack.translate(5.8F * open + 0.6F * clearanceArc, -0.6F * open, z);
+				rotateAround(poseStack, group, 2.0F * open, -10.0F * open, -12.0F * open);
 			}
 			case RIGHT_LEG -> {
-				poseStack.translate(-6.2F * open, -0.8F * open, (rear ? 3.6F : -3.4F) * open);
-				rotateAround(poseStack, group, 2.0F * open, 12.0F * open, 15.0F * open);
+				float z = (rear ? 3.0F : -2.8F) * open + (rear ? 0.5F : -0.5F) * clearanceArc;
+				poseStack.translate(-5.8F * open - 0.6F * clearanceArc, -0.6F * open, z);
+				rotateAround(poseStack, group, 2.0F * open, 10.0F * open, 12.0F * open);
 			}
 		}
-		scaleAround(poseStack, group, 1.0F + 0.035F * open,
-				1.0F + 0.02F * open, 1.0F + 0.035F * open);
+		scaleAround(poseStack, group, 1.0F + 0.045F * open,
+				1.0F + 0.02F * open, 1.0F + 0.045F * open);
 	}
 
 	private static boolean isRearArmorGroup(String name) {
-		return containsAny(name, "rear", "backplate", "spine", "heel", "vane_");
+		return containsAny(name, "rear", "backplate", "spine", "heel", "vane_",
+				"flight_fin", "cover_outer", "cover_inner", "hand_shell",
+				"wrist_lock", "emitter_shutter", "emitter_track");
 	}
 
 	private static float armorSide(String name) {
@@ -880,28 +950,37 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 		// 高初速磁吸：前半段快速跨越空间，末段减速并留出可读的机械锁定。
 		float progress = 1.0F - (float) Math.pow(1.0F - rawProgress, 2.8D);
 		float inverse = 1.0F - progress;
-		Vector3f start = part.p0();
-		Vector3f control = part.p1();
 		// P2 是最终装甲原点 (0, 0, 0)，因此公式的末项可以省略。
-		float x = inverse * inverse * start.x() + 2.0F * inverse * progress * control.x();
-		float y = inverse * inverse * start.y() + 2.0F * inverse * progress * control.y();
-		float z = inverse * inverse * start.z() + 2.0F * inverse * progress * control.z();
-		poseStack.translate(x, y, z);
+		float x = inverse * inverse * part.p0X() + 2.0F * inverse * progress * part.p1X();
+		float y = inverse * inverse * part.p0Y() + 2.0F * inverse * progress * part.p1Y();
+		float z = inverse * inverse * part.p0Z() + 2.0F * inverse * progress * part.p1Z();
+		// 接近体表阶段（0.55 -> 0.96）施加外法向净空弧，避免闭合环套斜切肢体。
+		float approachClearance = Mth.sin(smoothstep(0.42F, 0.96F, rawProgress) * Mth.PI);
+		float normalZ = group.rearGroup() ? 0.85F : -0.85F;
+		poseStack.translate(x, y, z + (group.coaxialShell() ? 0.0F : normalZ * approachClearance));
 
-		Vector3f initialRotation = part.initialRotation();
-		Vector3f pivot = part.pivot();
-		float rotationRemaining = 1.0F - smoothstep(0.08F, 0.90F, rawProgress);
-		rotateAroundPoint(poseStack, pivot.x(), pivot.y(), pivot.z(),
-				initialRotation.x() * rotationRemaining,
-				initialRotation.y() * rotationRemaining,
-				initialRotation.z() * rotationRemaining);
-		// 最后 28% 轻微扩张后回弹，配合全亮锁定闪光形成“吸附—咬合”冲击感。
+		float rotationRemaining = 1.0F - smoothstep(0.06F, 0.84F, rawProgress);
+		if (group.coaxialShell()) {
+			rotationRemaining *= 0.45F;
+		}
+		rotateAroundPoint(poseStack, part.pivotX(), part.pivotY(), part.pivotZ(),
+				part.rotX() * rotationRemaining,
+				part.rotY() * rotationRemaining,
+				part.rotZ() * rotationRemaining);
+		// 闭合环套在接近阶段保持轻微径向扩张，最后 28% 轻微扩张后回弹，形成“吸附—咬合”冲击感。
 		float lockPulse = (float) Math.sin(Math.PI * smoothstep(0.72F, 1.0F, rawProgress)) * 0.055F;
-		scaleAround(poseStack, group, 1.0F + lockPulse,
-				1.0F + lockPulse * 0.55F, 1.0F + lockPulse);
+		float shellClearance = group.coaxialShell() ? 0.11F * (1.0F - smoothstep(0.55F, 0.96F, rawProgress)) : 0.0F;
+		scaleAround(poseStack, group, 1.0F + lockPulse + shellClearance,
+				1.0F + lockPulse * 0.55F, 1.0F + lockPulse + shellClearance);
 	}
 
 	/** 未被精确命名规则覆盖的旧分组仍按身体锚点归入最近的逻辑部件，禁止组装开头残留悬空甲片。 */
+	private static ArmorAssemblyPart assemblyPartFor(ArmorObjMesh.Group group, GroupBinding binding) {
+		ArmorAssemblyPart classified = group.classifiedAssemblyPart();
+		if (classified != null) return classified;
+		return assemblyPartFor(group.name(), binding);
+	}
+
 	private static ArmorAssemblyPart assemblyPartFor(String groupName, GroupBinding binding) {
 		ArmorAssemblyPart classified = ArmorAssemblyPart.fromGroupName(groupName);
 		if (classified != null) return classified;
@@ -970,95 +1049,115 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 		float late = staged(progress, 0.34F, 1.0F);
 
 		if (name.contains("core_cradle")) {
-			poseStack.translate(0.0F, -0.01F * early, -0.03F * early);
+			poseStack.translate(0.0F, -0.02F * early, -0.06F * early);
 		} else if (name.contains("core_housing")) {
-			poseStack.translate(0.0F, -0.02F * early, -0.09F * early);
+			poseStack.translate(0.0F, -0.04F * early, -0.14F * early);
 			scaleAroundPoint(poseStack, 0.0F, 3.65F, -3.10F,
-					1.0F + 0.02F * early, 1.0F + 0.02F * early, 1.0F + 0.01F * early);
+					1.0F + 0.04F * early, 1.0F + 0.04F * early, 1.0F + 0.02F * early);
 		} else if (name.contains("core_reactor")) {
 			float pulseAmplitude = switch (variant) {
-				case VANGUARD -> 0.015F;
-				case SWIFT -> 0.024F;
-				case SENTINEL -> 0.010F;
+				case VANGUARD -> 0.020F;
+				case SWIFT -> 0.030F;
+				case SENTINEL -> 0.015F;
 			};
 			float pulseFrequency = switch (variant) {
-				case VANGUARD -> 0.30F;
-				case SWIFT -> 0.52F;
-				case SENTINEL -> 0.18F;
+				case VANGUARD -> 0.32F;
+				case SWIFT -> 0.54F;
+				case SENTINEL -> 0.22F;
 			};
-			float pulse = 1.0F + early * (0.012F + pulseAmplitude * speedProgress
+			float pulse = 1.0F + early * (0.020F + pulseAmplitude * speedProgress
 					* Mth.sin(animationTime * (pulseFrequency + speedProgress * 0.45F)));
-			poseStack.translate(0.0F, -0.025F * early,
-					(-0.12F - 0.04F * speedProgress) * early);
+			poseStack.translate(0.0F, -0.04F * early,
+					(-0.18F - 0.06F * speedProgress) * early);
 			scaleAroundPoint(poseStack, 0.0F, 3.65F, -3.10F,
-					pulse + 0.02F * early, pulse + 0.02F * early, 1.0F + 0.02F * early);
+					pulse + 0.04F * early, pulse + 0.04F * early, 1.0F + 0.03F * early);
 		}
 
-		if (name.contains("visor")) {
-			poseStack.translate(0.0F, -0.08F * early, -0.16F * early);
+		// 阶段一：高达头部天线微扬、双目聚焦与护颊散热开裂（Unicorn / Nu Psycho-Frame Head Unlock）
+		if (name.contains("visor_lens")) {
+			poseStack.translate(0.0F, -0.06F * early, -0.14F * early);
+		} else if (name.contains("visor_upper_frame") || name.contains("visor_sentinel_upper_lock")) {
+			poseStack.translate(0.0F, -0.14F * early, -0.12F * early);
+			rotateAround(poseStack, group, -3.5F * early, 0.0F, 0.0F);
 		}
 
-		if (name.contains("faceplate")) {
-			poseStack.translate(0.0F, -0.04F * early, -0.08F * early);
+		if (name.contains("crown_crest") || name.contains("head_brow")
+				|| name.contains("brow_shield") || name.contains("crown_bastion")) {
+			poseStack.translate(0.0F, -0.28F * middle, -0.16F * middle);
+			rotateAround(poseStack, group, -4.5F * middle, 0.0F, 0.0F);
 		}
 
-		if (name.contains("head_cheek_left") || name.contains("head_cheek_right")) {
+		if (name.contains("head_cheek_left") || name.contains("head_cheek_right")
+				|| name.contains("jaw_guard")) {
 			boolean left = name.contains("left");
 			float direction = left ? 1.0F : -1.0F;
-			poseStack.translate(direction * 0.24F * middle, 0.0F, -0.12F * middle);
-			rotateAround(poseStack, group, 0.0F, direction * -6.0F * middle, direction * -3.0F * middle);
+			poseStack.translate(direction * 0.34F * middle, 0.04F * middle, -0.16F * middle);
+			rotateAround(poseStack, group, 0.0F, direction * -8.5F * middle, direction * -4.0F * middle);
 		}
 
-		if (name.contains("head_rear_left") || name.contains("head_rear_right")) {
+		if (name.contains("head_rear_left") || name.contains("head_rear_right")
+				|| name.contains("head_sentinel_rear_")) {
 			boolean left = name.contains("left");
 			float direction = left ? 1.0F : -1.0F;
 			float finExtra = name.contains("_fin_") ? switch (variant) {
-				case VANGUARD -> 0.32F;
-				case SWIFT -> 0.74F;
-				case SENTINEL -> 0.0F;
+				case VANGUARD -> 0.36F;
+				case SWIFT -> 0.78F;
+				case SENTINEL -> 0.24F;
 			} : 0.0F;
-			poseStack.translate(direction * (0.22F + finExtra * 0.25F) * late,
-					-0.08F * late, (0.55F + finExtra) * late);
-			rotateAround(poseStack, group, 0.0F,
-					direction * (7.0F + finExtra * 15.0F) * late, direction * 3.0F * late);
+			poseStack.translate(direction * (0.28F + finExtra * 0.28F) * late,
+					-0.12F * late, (0.62F + finExtra) * late);
+			rotateAround(poseStack, group, 3.0F * late,
+					direction * (8.5F + finExtra * 14.0F) * late, direction * 4.0F * late);
 		}
 
-		if (name.contains("crown_crest")) {
-			poseStack.translate(0.0F, -0.32F * middle, -0.10F * middle);
+		// 阶段二：胸部排热百叶窗开启、胸甲外扩露出精神感应框架、前裙甲微抬让出提膝空间
+		if (name.contains("body_chest_upper") || name.contains("chest_crown")) {
+			poseStack.translate(0.0F, -0.16F * early, -0.22F * early);
+			rotateAround(poseStack, group, -9.0F * early, 0.0F, 0.0F);
+		} else if (name.equals("body_chest_titanium") || name.equals("body_sentinel_chest_bastion_titanium")) {
+			poseStack.translate(0.0F, -0.18F * middle, -0.20F * middle);
+			scaleAroundPoint(poseStack, 0.0F, 2.6F, -2.8F,
+					1.0F + 0.045F * middle, 1.0F + 0.025F * middle, 1.0F);
+		} else if (name.contains("body_chest_trace_led") || name.contains("body_sentinel_segment_trace_led")) {
+			poseStack.translate(0.0F, -0.12F * middle, -0.26F * middle);
+		} else if (name.equals("body_waist_titanium") || name.equals("body_sentinel_waist_apron_titanium")
+				|| name.contains("waist_buckle")) {
+			poseStack.translate(0.0F, -0.12F * middle, -0.20F * middle);
+			rotateAroundPoint(poseStack, 0.0F, 9.2F, -2.6F, -7.5F * middle, 0.0F, 0.0F);
 		}
 
-		if (name.contains("upper_pauldron")) {
+		// 阶段二：RG 高达肩甲抬升外展（露出肩部下沿推进喷口）与前臂稳定翼滑移
+		if (name.contains("upper_pauldron") || name.contains("upper_bastion")
+				|| name.contains("upper_tower")) {
 			boolean left = name.contains("left");
 			float direction = left ? 1.0F : -1.0F;
 			float sentinel = variant == ArmorVariant.SENTINEL ? 1.0F : 0.0F;
-			float retract = 1.0F - diveProgress * Mth.lerp(sentinel, 0.70F, 0.28F);
-			float shoulderTravel = Mth.lerp(sentinel, 0.50F, 0.78F);
+			float retract = 1.0F - diveProgress * Mth.lerp(sentinel, 0.65F, 0.28F);
+			float shoulderTravel = Mth.lerp(sentinel, 0.64F, 0.92F);
 			poseStack.translate(direction * shoulderTravel * middle * retract,
-					Mth.lerp(sentinel, -0.28F, -0.42F) * middle * retract,
-					Mth.lerp(sentinel, 0.12F, 0.24F) * middle * retract);
-			rotateAround(poseStack, group, 0.0F, direction * 5.0F * middle * retract,
-					direction * Mth.lerp(sentinel, -9.0F, -14.0F) * middle * retract);
+					Mth.lerp(sentinel, -0.42F, -0.58F) * middle * retract,
+					Mth.lerp(sentinel, 0.14F, 0.24F) * middle * retract);
+			rotateAround(poseStack, group, -3.0F * middle * retract,
+					direction * 6.0F * middle * retract,
+					direction * Mth.lerp(sentinel, -12.0F, -18.0F) * middle * retract);
+		} else if (name.contains("forearm_outer_flank") || name.contains("forearm_outer_shield")) {
+			boolean left = name.contains("left");
+			float direction = left ? 1.0F : -1.0F;
+			poseStack.translate(direction * 0.34F * middle, -0.14F * middle, 0.16F * middle);
+			rotateAround(poseStack, group, 0.0F, 0.0F, direction * -6.0F * middle);
 		}
 
+		// 阶段三：背部 Hi-MAT 机翼 / 翼状浮游炮高机动展开
 		if (name.contains("vane") || name.contains("flight_fin") || name.contains("wing")) {
 			boolean left = name.contains("left") || name.contains("_l_") || name.endsWith("_l");
 			float direction = left ? 1.0F : -1.0F;
 			boolean sentinelWing = variant == ArmorVariant.SENTINEL
 					&& name.contains("_sentinel_");
-			// 守望翼自带分段气动姿态，不再复用通用稳定面的 wingLoad。
 			float wingLoad = diveProgress;
 			if (sentinelWing) {
-				/*
-				 * 展开后的轮廓由配置状态（overdrive）决定，这里只负责「飞行中的气动姿态」。
-				 *
-				 * 所有段都绕同一个肩胛插座 (3.62, 2.55, 2.52)，各段只是角度不同 —— 叶片因此
-				 * 天然同心，不会像各绕自己铰链那样把翼面撕开。tier 让翼尖比翼根动得多，
-				 * 读起来是一面逐渐打开的气动面，而不是一块刚性板。
-				 */
 				float active = sentinelOverdriveProgress(entity, animationTime)
 						* smoothstep(0.04F, 0.58F, progress);
 				float tier = sentinelWingTier(name);
-				// 速度 → 后掠，俯冲 → 收拢，低速悬停 → 相位错开的轻微扇动。
 				float speedSweep = active * smoothstep(0.10F, 0.85F, speedProgress);
 				float diveTuck = active * diveProgress;
 				float hoverFlap = active * (1.0F - speedProgress)
@@ -1078,65 +1177,79 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 			}
 
 			float wingStage = late;
+			float hoverBreath = (1.0F - speedProgress) * Mth.sin(animationTime * 0.16F) * 0.18F;
 			float hoverX = switch (variant) {
-				case VANGUARD -> 2.65F;
-				case SWIFT -> 3.55F;
-				case SENTINEL -> 2.65F;
+				case VANGUARD -> 3.15F;
+				case SWIFT -> 4.10F;
+				case SENTINEL -> 3.15F;
 			};
 			float diveX = switch (variant) {
-				case VANGUARD -> 0.90F;
-				case SWIFT -> 1.36F;
-				case SENTINEL -> 0.90F;
+				case VANGUARD -> 1.05F;
+				case SWIFT -> 1.52F;
+				case SENTINEL -> 1.05F;
 			};
-			float travelX = Mth.lerp(wingLoad, hoverX, diveX);
+			float travelX = Mth.lerp(wingLoad, hoverX + hoverBreath, diveX);
 			float travelY = Mth.lerp(wingLoad,
-					-0.55F,
-					variant == ArmorVariant.SWIFT ? 1.02F
-							: 0.75F);
+					-0.78F,
+					variant == ArmorVariant.SWIFT ? 1.08F : 0.82F);
 			float travelZ = Mth.lerp(wingLoad,
-					variant == ArmorVariant.SWIFT ? 1.44F : 1.10F,
-					1.60F);
+					variant == ArmorVariant.SWIFT ? 1.56F : 1.24F,
+					1.72F);
 			poseStack.translate(
 					direction * travelX * wingStage,
 					travelY * wingStage,
 					travelZ * wingStage);
 			rotateAroundPoint(poseStack, direction * 3.62F, 2.55F, 2.52F,
-					Mth.lerp(wingLoad, -8.0F,
-							variant == ArmorVariant.SWIFT ? -22.0F
-									: -16.0F) * wingStage,
+					Mth.lerp(wingLoad, -10.0F,
+							variant == ArmorVariant.SWIFT ? -24.0F : -18.0F) * wingStage,
 					direction * Mth.lerp(wingLoad,
-							variant == ArmorVariant.SWIFT ? -42.0F
-									: -32.0F,
-							-10.0F) * wingStage,
+							variant == ArmorVariant.SWIFT ? -44.0F : -34.0F,
+							-12.0F) * wingStage,
 					direction * Mth.lerp(wingLoad,
-							-22.0F,
-							variant == ArmorVariant.SWIFT ? -2.0F
-									: -5.0F) * wingStage);
+							-26.0F,
+							variant == ArmorVariant.SWIFT ? -4.0F : -6.0F) * wingStage);
 			if (name.contains("spine")) {
-				poseStack.translate(direction * 0.18F * late, 0.0F, 0.12F * late);
-			} else if (name.contains("field")) {
-				poseStack.translate(direction * 0.38F * late, 0.0F, 0.22F * late);
-				scaleAround(poseStack, group, 1.0F, 1.0F + (0.12F + 0.16F * speedProgress) * late, 1.0F);
+				poseStack.translate(direction * 0.22F * late, 0.0F, 0.16F * late);
+			} else if (name.contains("field") || name.contains("trace_led")) {
+				poseStack.translate(direction * 0.42F * late, 0.0F, 0.26F * late);
+				scaleAround(poseStack, group, 1.0F, 1.0F + (0.16F + 0.20F * speedProgress) * late, 1.0F);
 			}
 		}
 
-		if (name.contains("thigh_outer_flank")) {
+		// 阶段三：RG Nu 高达大腿裂甲展开、膝部竖向黄色喷口前移抬升、小腿后侧推进护罩张开
+		if (name.contains("thigh_plate") || name.contains("thigh_bastion")) {
+			poseStack.translate(0.0F, -0.16F * middle, -0.18F * middle);
+			scaleAround(poseStack, group, 1.0F + 0.04F * middle, 1.0F, 1.0F);
+		} else if (name.contains("thigh_energy_trace") || name.contains("thigh_node_led")) {
+			poseStack.translate(0.0F, -0.14F * middle, -0.24F * middle);
+		} else if (name.contains("thigh_knee") || name.contains("knee_lock")
+				|| name.contains("thigh_flank_trim") || name.contains("sentinel_hip_shield")) {
+			poseStack.translate(0.0F, -0.26F * middle, -0.34F * middle);
+			rotateAround(poseStack, group, -11.0F * middle, 0.0F, 0.0F);
+		} else if (name.contains("thigh_outer_flank") || name.contains("thigh_fin")) {
 			boolean left = name.contains("left");
 			float direction = left ? 1.0F : -1.0F;
 			float sentinel = variant == ArmorVariant.SENTINEL ? 1.0F : 0.0F;
 			float retract = 1.0F - diveProgress * Mth.lerp(sentinel, 0.70F, 0.25F);
-			poseStack.translate(direction * Mth.lerp(sentinel, 0.24F, 0.46F) * middle * retract,
-					0.0F, Mth.lerp(sentinel, 0.14F, 0.26F) * middle * retract);
-			rotateAround(poseStack, group, 0.0F, 0.0F, direction * -4.0F * middle * retract);
+			poseStack.translate(direction * Mth.lerp(sentinel, 0.32F, 0.52F) * middle * retract,
+					0.0F, Mth.lerp(sentinel, 0.18F, 0.30F) * middle * retract);
+			rotateAround(poseStack, group, 0.0F, 0.0F, direction * -6.0F * middle * retract);
 		}
 
-		if (name.contains("boot") && name.contains("outer_guard")) {
+		if (name.contains("calf_crest")) {
+			poseStack.translate(0.0F, -0.20F * middle, -0.24F * middle);
+			rotateAround(poseStack, group, -8.5F * middle, 0.0F, 0.0F);
+		} else if (name.contains("calf_rear") || name.contains("heel")) {
+			poseStack.translate(0.0F, 0.16F * late, 0.56F * late);
+			rotateAround(poseStack, group, 12.0F * late, 0.0F, 0.0F);
+		} else if (name.contains("boot") && (name.contains("outer_guard")
+				|| name.contains("outer_stabilizer") || name.contains("calf_fin"))) {
 			boolean left = name.contains("left");
 			float direction = left ? 1.0F : -1.0F;
 			float sentinel = variant == ArmorVariant.SENTINEL ? 1.0F : 0.0F;
-			poseStack.translate(direction * Mth.lerp(sentinel, 0.22F, 0.42F) * middle,
-					0.0F, Mth.lerp(sentinel, 0.16F, 0.30F) * middle);
-			rotateAround(poseStack, group, 0.0F, direction * -6.0F * middle, 0.0F);
+			poseStack.translate(direction * Mth.lerp(sentinel, 0.34F, 0.52F) * middle,
+					0.0F, Mth.lerp(sentinel, 0.22F, 0.36F) * middle);
+			rotateAround(poseStack, group, 4.0F * middle, direction * -9.0F * middle, 0.0F);
 		}
 
 		if (name.contains("boot_ring") || name.contains("ankle_ring") || name.contains("gravity_ring")) {
@@ -1274,110 +1387,124 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 		 * suit changing configuration, including faceplate, chest, gauntlets, waist, knees
 		 * and boots, rather than mistaking two moving wings for the whole transformation.
 		 */
+		if (group.coaxialShell()) {
+			// 闭合底衬与环形骨架保持原位包覆，避免缩放或单向位移穿透外层重甲。
+			return;
+		}
+		float zOut = group.rearGroup() ? 1.0F : -1.0F;
 		if (zone == SentinelVisualZone.HEAD) {
 			float headPhase = smoothstep(0.02F, 0.48F, streamline);
+			float lift = Mth.sin(headPhase * Mth.PI);
 			if (name.contains("jaw_guard")) {
-				poseStack.translate(direction * -0.46F * headPhase,
-						-0.20F * headPhase, 0.38F * headPhase);
-				rotateAround(poseStack, group, -7.0F * headPhase,
-						direction * -11.0F * headPhase,
-						direction * 8.0F * headPhase);
+				poseStack.translate(direction * (0.28F * headPhase + 0.18F * lift),
+						-0.18F * headPhase, -0.22F * headPhase - 0.24F * lift);
+				rotateAround(poseStack, group, -6.0F * headPhase,
+						direction * -9.0F * headPhase,
+						direction * 6.0F * headPhase);
 			} else if (name.contains("crown") || name.contains("brow")) {
-				poseStack.translate(0.0F, -0.48F * headPhase, 0.48F * headPhase);
+				poseStack.translate(0.0F, -0.36F * headPhase - 0.14F * lift,
+						-0.18F * headPhase - 0.20F * lift);
 				scaleAround(poseStack, group,
-						1.0F - 0.055F * headPhase,
-						1.0F - 0.030F * headPhase,
-						1.0F - 0.080F * headPhase);
+						1.0F + 0.025F * headPhase,
+						1.0F - 0.020F * headPhase,
+						1.0F + 0.030F * headPhase);
 			} else if (name.contains("rear_")) {
-				poseStack.translate(direction * 0.38F * headPhase,
-						0.10F * headPhase, 0.70F * headPhase);
+				poseStack.translate(direction * 0.34F * headPhase,
+						0.08F * headPhase, 0.56F * headPhase + 0.18F * lift);
 				rotateAround(poseStack, group, -5.0F * headPhase,
-						direction * 12.0F * headPhase,
-						direction * -6.0F * headPhase);
+						direction * 10.0F * headPhase,
+						direction * -5.0F * headPhase);
 			} else {
-				poseStack.translate(0.0F, -0.26F * headPhase, 0.34F * headPhase);
+				poseStack.translate(direction * 0.14F * headPhase,
+						-0.18F * headPhase, zOut * (0.14F * headPhase + 0.16F * lift));
 				scaleAround(poseStack, group,
-						1.0F - 0.035F * headPhase,
-						1.0F - 0.025F * headPhase,
-						1.0F - 0.065F * headPhase);
+						1.0F + 0.020F * headPhase,
+						1.0F - 0.015F * headPhase,
+						1.0F + 0.020F * headPhase);
 			}
 		} else if (zone == SentinelVisualZone.TORSO) {
 			float torsoPhase = smoothstep(0.08F, 0.64F, streamline);
+			float lift = Mth.sin(torsoPhase * Mth.PI);
 			if (name.contains("backplate") || name.contains("spine")) {
-				poseStack.translate(0.0F, -0.22F * torsoPhase, 0.82F * torsoPhase);
+				poseStack.translate(0.0F, -0.20F * torsoPhase, 0.42F * torsoPhase + 0.22F * lift);
 				scaleAround(poseStack, group,
-						1.0F - 0.12F * torsoPhase,
+						1.0F - 0.04F * torsoPhase,
 						1.0F + 0.035F * torsoPhase,
-						1.0F - 0.10F * torsoPhase);
+						1.0F + 0.04F * torsoPhase);
 			} else if (name.contains("waist_apron")) {
 				float waistPhase = smoothstep(0.20F, 0.78F, streamline);
-				poseStack.translate(0.0F, 0.36F * waistPhase, 0.46F * waistPhase);
+				float waistLift = Mth.sin(waistPhase * Mth.PI);
+				poseStack.translate(0.0F, 0.24F * waistPhase, -0.18F * waistPhase - 0.20F * waistLift);
 				scaleAround(poseStack, group,
-						1.0F - 0.15F * waistPhase,
-						1.0F - 0.06F * waistPhase,
-						1.0F - 0.10F * waistPhase);
+						1.0F - 0.04F * waistPhase,
+						1.0F - 0.03F * waistPhase,
+						1.0F + 0.02F * waistPhase);
 			} else if (name.startsWith("core_")) {
-				poseStack.translate(0.0F, -0.18F * torsoPhase, -0.16F * torsoPhase);
+				poseStack.translate(0.0F, -0.18F * torsoPhase, -0.22F * torsoPhase - 0.14F * lift);
 				scaleAroundPoint(poseStack, 0.0F, 3.65F, -3.10F,
 						1.0F + 0.10F * torsoPhase,
 						1.0F + 0.10F * torsoPhase,
-						1.0F - 0.04F * torsoPhase);
+						1.0F + 0.04F * torsoPhase);
 			} else {
-				poseStack.translate(0.0F, -0.12F * torsoPhase, 0.54F * torsoPhase);
+				poseStack.translate(direction * 0.16F * torsoPhase,
+						-0.14F * torsoPhase, zOut * (0.16F * torsoPhase + 0.22F * lift));
 				scaleAround(poseStack, group,
-						1.0F - 0.10F * torsoPhase,
-						1.0F - 0.035F * torsoPhase,
-						1.0F - 0.12F * torsoPhase);
+						1.0F - 0.03F * torsoPhase,
+						1.0F - 0.02F * torsoPhase,
+						1.0F + 0.03F * torsoPhase);
 			}
 		} else if (zone == SentinelVisualZone.ARM) {
 			float armPhase = smoothstep(0.14F, 0.74F, streamline);
 			boolean upper = name.contains("upper_");
 			float platePhase = upper ? armPhase : smoothstep(0.22F, 0.82F, streamline);
+			float lift = Mth.sin(platePhase * Mth.PI);
 			poseStack.translate(
-					direction * (-0.62F - (upper ? 0.18F : 0.0F)) * platePhase,
-					(upper ? -0.20F : 0.18F) * platePhase,
-					0.58F * platePhase);
+					direction * ((upper ? 0.28F : 0.18F) * platePhase + 0.24F * lift),
+					(upper ? -0.22F : 0.14F) * platePhase,
+					zOut * (0.18F * platePhase + 0.24F * lift));
 			scaleAround(poseStack, group,
-					1.0F - 0.105F * platePhase,
-					1.0F - 0.030F * platePhase,
-					1.0F - 0.12F * platePhase);
+					1.0F - 0.025F * platePhase,
+					1.0F - 0.020F * platePhase,
+					1.0F + 0.025F * platePhase);
 			if (upper) {
-				rotateAround(poseStack, group, -7.0F * platePhase,
-						direction * -10.0F * platePhase,
-						direction * 13.0F * platePhase);
-			} else if (name.contains("forearm")) {
-				rotateAround(poseStack, group, 4.0F * platePhase,
-						direction * 6.0F * platePhase,
+				rotateAround(poseStack, group, -5.0F * platePhase,
+						direction * -7.0F * platePhase,
 						direction * -8.0F * platePhase);
+			} else if (name.contains("forearm")) {
+				rotateAround(poseStack, group, 3.0F * platePhase,
+						direction * 4.0F * platePhase,
+						direction * -5.0F * platePhase);
 			}
 		} else if (zone == SentinelVisualZone.LEG) {
 			float legPhase = smoothstep(0.24F, 0.86F, streamline);
+			float lift = Mth.sin(legPhase * Mth.PI);
 			boolean knee = name.contains("_knee_");
-			poseStack.translate(direction * (-0.42F - (knee ? 0.16F : 0.0F)) * legPhase,
+			poseStack.translate(direction * ((knee ? 0.12F : 0.20F) * legPhase + 0.18F * lift),
 					(knee ? -0.18F : -0.06F) * legPhase,
-					0.48F * legPhase);
+					zOut * ((knee ? 0.24F : 0.16F) * legPhase + 0.22F * lift));
 			scaleAround(poseStack, group,
-					1.0F - 0.09F * legPhase,
 					1.0F - 0.025F * legPhase,
-					1.0F - 0.11F * legPhase);
+					1.0F - 0.020F * legPhase,
+					1.0F + 0.025F * legPhase);
 			if (knee) {
-				rotateAround(poseStack, group, -10.0F * legPhase,
-						direction * -7.0F * legPhase,
-						direction * 8.0F * legPhase);
+				rotateAround(poseStack, group, -7.0F * legPhase,
+						direction * -4.0F * legPhase,
+						direction * 4.0F * legPhase);
 			}
 		} else if (zone == SentinelVisualZone.BOOT) {
 			float bootPhase = smoothstep(0.32F, 0.94F, streamline);
+			float lift = Mth.sin(bootPhase * Mth.PI);
 			boolean toe = name.contains("toe_ram");
-			poseStack.translate(direction * -0.34F * bootPhase,
-					(toe ? 0.18F : 0.04F) * bootPhase,
-					(toe ? -0.34F : 0.42F) * bootPhase);
+			poseStack.translate(direction * (0.16F * bootPhase + 0.15F * lift),
+					(toe ? 0.14F : 0.04F) * bootPhase,
+					(toe ? -0.36F * bootPhase - 0.18F * lift : zOut * (0.16F * bootPhase + 0.20F * lift)));
 			scaleAround(poseStack, group,
-					1.0F - 0.075F * bootPhase,
-					1.0F - 0.025F * bootPhase,
-					1.0F - 0.10F * bootPhase);
+					1.0F - 0.020F * bootPhase,
+					1.0F - 0.015F * bootPhase,
+					1.0F + 0.020F * bootPhase);
 			if (toe) {
 				rotateAround(poseStack, group, 5.0F * bootPhase, 0.0F,
-						direction * -5.0F * bootPhase);
+						direction * -4.0F * bootPhase);
 			}
 		}
 	}
@@ -1786,48 +1913,91 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 				|| name.contains("emissive") || name.contains("_glow") || name.startsWith("glow_");
 	}
 
+	static ArmorObjMesh.Color previewBaseColor(ArmorVariant variant, String groupName) {
+		return variantBaseColor(variant, groupName, colorFor(groupName, 1.0F));
+	}
+
 	private static ArmorObjMesh.Color colorFor(String name, float intensity) {
 		if (isLed(name)) {
 			int alpha = Math.round(255.0F * Mth.clamp(intensity, 0.0F, 1.0F));
+			if (name.contains("chin_chevron") || name.contains("command_node_led")) {
+				return new ArmorObjMesh.Color(218, 48, 54, alpha);
+			}
 			return new ArmorObjMesh.Color(80, 226, 255, alpha);
 		}
-		if (name.contains("visor") || name.contains("glass")) {
+		if (name.contains("visor_lens") || name.contains("glass")) {
 			return VISOR;
 		}
-		if (name.contains("shadow") || name.contains("under") || name.contains("black")) {
+		if (name.contains("visor_lower_frame") || name.contains("visor_sentinel_lower_lock")
+				|| name.contains("shadow") || name.contains("under") || name.contains("black")
+				|| name.contains("_seal_")) {
 			return SHADOW;
 		}
-		if (name.contains("dark") || name.contains("gunmetal") || name.contains("frame") || name.contains("joint")) {
+		if (name.contains("abdomen_sternum") || name.contains("chest_frame_gunmetal")) {
+			return CRIMSON;
+		}
+		if (name.contains("visor_upper_frame") || name.contains("visor_sentinel_upper_lock")
+				|| name.contains("faceplate_spine") || name.contains("faceplate_sentinel_lock")
+				|| name.contains("calf_crest_light_titanium") || name.contains("body_waist_titanium")
+				|| name.contains("waist_apron") || name.contains("body_abdomen_titanium")
+				|| name.contains("abdominal_bulwark") || name.contains("upper_pauldron_titanium")
+				|| name.contains("upper_bastion")) {
+			return TITANIUM;
+		}
+		if (name.contains("dark") || name.contains("gunmetal") || name.contains("frame")
+				|| name.contains("joint") || name.contains("barrel") || name.contains("shutter")
+				|| name.contains("wrist_lock") || name.contains("rail") || name.contains("brace")
+				|| name.contains("heel") || name.contains("load_frame") || name.contains("yoke")
+				|| name.contains("collar") || name.contains("temple") || name.contains("cradle")) {
 			return GUNMETAL;
 		}
-		if (name.contains("accent") || name.contains("trim")) {
-			return ACCENT;
-		}
-		if (name.contains("light") || name.contains("silver")) {
+		if (name.contains("head_brow") || name.contains("brow_shield")
+				|| name.contains("crown_crest") || name.contains("crown_bastion")
+				|| name.contains("chest_upper") || name.contains("chest_crown")
+				|| name.contains("core_housing") || name.contains("thigh_knee")
+				|| name.contains("knee_lock") || name.contains("forearm_cuff")
+				|| name.contains("waist_buckle") || name.contains("pauldron_crest")
+				|| name.contains("wing_root_shell") || name.contains("wing_tip_shell")) {
 			return LIGHT_TITANIUM;
+		}
+		if (name.contains("cannon_housing") || name.contains("side_trim")
+				|| name.contains("rear_left_fin") || name.contains("rear_right_fin")) {
+			return CRIMSON;
+		}
+		if (name.contains("body_chest_titanium") || name.contains("chest_bastion")
+				|| name.contains("body_backplate_titanium") || name.contains("backplate_sentinel_lock")
+				|| name.contains("thigh_flank_trim") || name.contains("sentinel_hip_shield")
+				|| name.contains("toe_light_titanium") || name.contains("toe_ram")
+				|| name.contains("vane_left_shell") || name.contains("vane_right_shell")
+				|| name.contains("wing_primary_shell") || name.contains("swift_longfin")
+				|| name.contains("flank")) {
+			return ACCENT;
 		}
 		return TITANIUM;
 	}
+
 	private static ArmorObjMesh.Color variantBaseColor(
 			ArmorVariant variant, String groupName, ArmorObjMesh.Color base) {
 		if (variant == ArmorVariant.VANGUARD) return base;
-		boolean dark = groupName.contains("shadow") || groupName.contains("under")
-				|| groupName.contains("black") || groupName.contains("dark")
-				|| groupName.contains("gunmetal") || groupName.contains("frame")
-				|| groupName.contains("joint");
-		ArmorObjMesh.Color target = switch (variant) {
-			case SWIFT -> dark
-					? new ArmorObjMesh.Color(34, 26, 53, 255)
-					: new ArmorObjMesh.Color(135, 115, 170, 255);
-			case SENTINEL -> dark
-					? new ArmorObjMesh.Color(24, 32, 40, 255)
-					: new ArmorObjMesh.Color(76, 94, 108, 255);
-			case VANGUARD -> base;
-		};
-		float strength = variant == ArmorVariant.SWIFT
-				? (dark ? 0.66F : 0.56F)
-				: (dark ? 0.84F : 0.78F);
-		return mixColor(base, target, strength);
+		if (variant == ArmorVariant.SWIFT) {
+			if (base == VISOR) return SWIFT_VISOR;
+			if (base == SHADOW) return SWIFT_SHADOW;
+			if (base == GUNMETAL) return SWIFT_GUNMETAL;
+			if (base == ACCENT) return SWIFT_ACCENT;
+			if (base == CRIMSON) return SWIFT_CRIMSON;
+			if (base == LIGHT_TITANIUM) return SWIFT_HIGHLIGHT;
+			return SWIFT_PRIMARY;
+		}
+		if (variant == ArmorVariant.SENTINEL) {
+			if (base == VISOR) return SENTINEL_VISOR;
+			if (base == SHADOW) return SENTINEL_SHADOW;
+			if (base == GUNMETAL) return SENTINEL_GUNMETAL;
+			if (base == ACCENT) return SENTINEL_ACCENT;
+			if (base == CRIMSON) return SENTINEL_CRIMSON;
+			if (base == LIGHT_TITANIUM) return SENTINEL_HIGHLIGHT;
+			return SENTINEL_PRIMARY;
+		}
+		return base;
 	}
 
 	private static ArmorObjMesh.Color variantLedColor(
@@ -1891,7 +2061,13 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 			// caller. Sentinel's old implementation replaced them with cyan at
 			// speed zero, so its lights appeared frozen during transformation.
 			ArmorObjMesh.Color phaseAwareIdle = mixColor(base, idle, 0.34F);
-			return mixColor(phaseAwareIdle, loaded, load);
+			ArmorObjMesh.Color result = mixColor(phaseAwareIdle, loaded, load);
+			float transActivity = Mth.sin(Mth.clamp(overdrive, 0.0F, 1.0F) * Mth.PI);
+			if (transActivity > 0.02F) {
+				ArmorObjMesh.Color surgeGold = new ArmorObjMesh.Color(255, 232, 148, 255);
+				result = mixColor(result, surgeGold, 0.65F * transActivity);
+			}
+			return result;
 		}
 		float moving = smoothstep(0.08F, 0.42F, speedProgress);
 		float tint = Mth.lerp(moving, 0.68F, 0.24F);
@@ -2312,7 +2488,7 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 				renderGroup(mesh, group, binding, model, poseStack, base, player, packedLight,
 						variantBaseColor(armorVariant, group.name(), colorFor(group.name(), 1.0F)),
 						0.0F, 0.0F, 0.0F, animationTime,
-						flightPose, 0.0F, null, 1.0F, false);
+						flightPose, progress, null, 1.0F, false);
 			}
 
 			VertexConsumer emissive = buffers.getBuffer(RenderType.entityTranslucentEmissive(EMISSIVE_TEXTURE));
@@ -2325,7 +2501,7 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 						variantLedColor(player, armorVariant, group.name(),
 								dockingLedColor(progress, group.name()), 0.0F),
 						0.0F, 0.0F, 0.0F, animationTime,
-						flightPose, 0.0F, null, 1.0F, false);
+						flightPose, progress, null, 1.0F, false);
 			}
 		}
 
@@ -2399,6 +2575,10 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 
 	private record GroupBinding(Anchor anchor, EquipmentSlot slot, LimbSegment segment) {
 		private static GroupBinding from(String rawName) {
+			return BINDING_CACHE.computeIfAbsent(rawName, GroupBinding::computeFrom);
+		}
+
+		private static GroupBinding computeFrom(String rawName) {
 			String name = rawName.toLowerCase(Locale.ROOT);
 			if (hasAny(name, "left_boot", "boot_left", "left_ankle", "ankle_left")) {
 				return new GroupBinding(Anchor.LEFT_LEG, EquipmentSlot.FEET, LimbSegment.SHIN);

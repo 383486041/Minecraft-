@@ -34,16 +34,16 @@ import net.minecraft.world.phys.Vec3;
  * color-only render layer.</p>
  */
 public final class ArmMountedBladeRenderer {
-	private static final Rgba GUNMETAL = new Rgba(35, 47, 55, 255);
-	private static final Rgba TITANIUM = new Rgba(151, 174, 184, 255);
-	private static final Rgba BREAKER_ALLOY = new Rgba(18, 28, 36, 255);
-	private static final Rgba BREAKER_PLATE = new Rgba(92, 116, 130, 255);
-	private static final Rgba VANGUARD = new Rgba(255, 112, 26, 236);
-	private static final Rgba SWIFT = new Rgba(255, 42, 224, 236);
-	private static final Rgba VANGUARD_CORE = new Rgba(255, 176, 72, 226);
-	private static final Rgba SWIFT_CORE = new Rgba(255, 104, 236, 230);
-	private static final Rgba BREAKER_FIELD = new Rgba(24, 198, 255, 126);
-	private static final Rgba BREAKER_EDGE = new Rgba(38, 188, 255, 214);
+	private static final Rgba GUNMETAL = new Rgba(42, 52, 66, 255);
+	private static final Rgba TITANIUM = new Rgba(240, 244, 250, 255);
+	private static final Rgba BREAKER_ALLOY = new Rgba(38, 52, 82, 255);
+	private static final Rgba BREAKER_PLATE = new Rgba(238, 188, 54, 255);
+	private static final Rgba VANGUARD = new Rgba(36, 232, 255, 236);
+	private static final Rgba SWIFT = new Rgba(242, 54, 255, 236);
+	private static final Rgba VANGUARD_CORE = new Rgba(212, 252, 255, 236);
+	private static final Rgba SWIFT_CORE = new Rgba(255, 176, 255, 236);
+	private static final Rgba BREAKER_FIELD = new Rgba(42, 238, 218, 136);
+	private static final Rgba BREAKER_EDGE = new Rgba(136, 255, 238, 224);
 	private static final Rgba BREAKER_LOCK = new Rgba(220, 252, 255, 236);
 	private static final double BREAKER_EDGE_BAND_WIDTH = 0.14D;
 
@@ -70,48 +70,48 @@ public final class ArmMountedBladeRenderer {
 			new double[]{0.0D, 0.08D, 0.18D, 0.44D, 0.58D, 0.76D, 0.90D, 1.0D},
 			new double[]{0.18D, 0.58D, 1.05D, 1.05D, 0.82D, 0.82D, 0.40D, 0.0D},
 			0.044D);
-	private static final Rgba VANGUARD_ALLOY = new Rgba(42, 36, 32, 255);
-	private static final Rgba VANGUARD_PLATE = new Rgba(164, 86, 34, 255);
-	private static final Rgba SWIFT_ALLOY = new Rgba(28, 25, 44, 255);
-	private static final Rgba SWIFT_PLATE = new Rgba(118, 48, 142, 255);
+	private static final Rgba VANGUARD_ALLOY = new Rgba(36, 92, 186, 255);
+	private static final Rgba VANGUARD_PLATE = new Rgba(242, 246, 252, 255);
+	private static final Rgba SWIFT_ALLOY = new Rgba(72, 48, 148, 255);
+	private static final Rgba SWIFT_PLATE = new Rgba(232, 228, 244, 255);
 
-	/* Vanguard: broad centered breaching blade, transformed from one reinforced forearm shell. */
+	/* Vanguard: Sleek Gundam Beam Saber / Beam Tonfa blade profile with a cylindrical hilt emitter. */
 	private static final BreakerShape FIRST_PERSON_VANGUARD_TRANSFORM_SHAPE = new BreakerShape(
-			new double[]{0.0D, 0.10D, 0.22D, 0.46D, 0.72D, 0.90D, 1.0D},
+			new double[]{0.0D, 0.06D, 0.16D, 0.52D, 0.80D, 0.94D, 1.0D},
 			new double[]{0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D},
-			new double[]{0.14D, 0.34D, 0.76D, 0.88D, 0.64D, 0.30D, 0.0D},
-			0.044D);
+			new double[]{0.12D, 0.28D, 0.46D, 0.48D, 0.38D, 0.20D, 0.0D},
+			0.042D);
 	private static final BreakerShape WORLD_VANGUARD_TRANSFORM_SHAPE = new BreakerShape(
-			new double[]{0.0D, 0.10D, 0.22D, 0.46D, 0.72D, 0.90D, 1.0D},
+			new double[]{0.0D, 0.06D, 0.16D, 0.52D, 0.80D, 0.94D, 1.0D},
 			new double[]{0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D},
-			new double[]{0.16D, 0.40D, 0.92D, 1.06D, 0.76D, 0.36D, 0.0D},
-			0.052D);
-	/* Swift: two narrow swept back-blades; each forearm unfolds its own independent weapon. */
+			new double[]{0.15D, 0.34D, 0.56D, 0.58D, 0.46D, 0.24D, 0.0D},
+			0.050D);
+	/* Swift: Sleek Exia / 00 GN Twin Beam Tonfa Katana profile. */
 	private static final BreakerShape FIRST_PERSON_SWIFT_TRANSFORM_SHAPE = new BreakerShape(
-			new double[]{0.0D, 0.12D, 0.28D, 0.54D, 0.78D, 0.92D, 1.0D},
-			new double[]{0.0D, 0.02D, 0.06D, 0.10D, 0.08D, 0.04D, 0.0D},
-			new double[]{0.10D, 0.24D, 0.50D, 0.58D, 0.40D, 0.18D, 0.0D},
+			new double[]{0.0D, 0.08D, 0.22D, 0.58D, 0.82D, 0.94D, 1.0D},
+			new double[]{0.0D, 0.02D, 0.05D, 0.08D, 0.06D, 0.03D, 0.0D},
+			new double[]{0.10D, 0.22D, 0.38D, 0.42D, 0.32D, 0.16D, 0.0D},
 			0.034D);
 	private static final BreakerShape WORLD_SWIFT_TRANSFORM_SHAPE = new BreakerShape(
-			new double[]{0.0D, 0.12D, 0.28D, 0.54D, 0.78D, 0.92D, 1.0D},
-			new double[]{0.0D, 0.03D, 0.08D, 0.14D, 0.11D, 0.05D, 0.0D},
-			new double[]{0.12D, 0.28D, 0.58D, 0.68D, 0.46D, 0.22D, 0.0D},
+			new double[]{0.0D, 0.08D, 0.22D, 0.58D, 0.82D, 0.94D, 1.0D},
+			new double[]{0.0D, 0.03D, 0.07D, 0.11D, 0.08D, 0.04D, 0.0D},
+			new double[]{0.12D, 0.26D, 0.46D, 0.50D, 0.38D, 0.19D, 0.0D},
 			0.040D);
 	private static final BreakerProfile FIRST_PERSON_VANGUARD_TRANSFORM = new BreakerProfile(
-			13.4D, 0.30D, 1.76D, 0.30D, 0.34D, 0.12D, -0.72D,
-			6.35D, 3.02D, 9.58D, 3.10D, 0.965D, -0.262D, 16.0D, 0.40D,
+			14.8D, 0.42D, 1.42D, 0.28D, 0.32D, 0.12D, -0.72D,
+			6.35D, 3.02D, 9.75D, 3.12D, 0.972D, -0.235D, 16.0D, 0.26D,
 			FIRST_PERSON_VANGUARD_TRANSFORM_SHAPE);
 	private static final BreakerProfile WORLD_VANGUARD_TRANSFORM = new BreakerProfile(
-			17.6D, 0.34D, 1.92D, 0.34D, 0.38D, 0.14D, -0.74D,
-			6.22D, 3.08D, 9.82D, 3.18D, 0.982D, -0.188D, 2.0D, 0.43D,
+			20.4D, 0.48D, 1.54D, 0.32D, 0.36D, 0.14D, -0.74D,
+			6.22D, 3.08D, 9.95D, 3.18D, 0.985D, -0.172D, 4.0D, 0.28D,
 			WORLD_VANGUARD_TRANSFORM_SHAPE);
 	private static final BreakerProfile FIRST_PERSON_SWIFT_TRANSFORM = new BreakerProfile(
-			11.6D, 0.38D, 1.34D, 0.24D, 0.44D, 0.10D, -0.54D,
-			6.48D, 2.96D, 9.34D, 3.04D, 0.978D, -0.208D, 20.0D, 0.36D,
+			13.2D, 0.44D, 1.24D, 0.24D, 0.38D, 0.10D, -0.54D,
+			6.48D, 2.96D, 9.52D, 3.04D, 0.980D, -0.198D, 20.0D, 0.30D,
 			FIRST_PERSON_SWIFT_TRANSFORM_SHAPE);
 	private static final BreakerProfile WORLD_SWIFT_TRANSFORM = new BreakerProfile(
-			15.4D, 0.44D, 1.46D, 0.26D, 0.50D, 0.12D, -0.58D,
-			6.34D, 3.02D, 9.56D, 3.10D, 0.990D, -0.141D, 7.0D, 0.38D,
+			17.8D, 0.50D, 1.36D, 0.26D, 0.44D, 0.12D, -0.58D,
+			6.34D, 3.02D, 9.72D, 3.10D, 0.990D, -0.141D, 8.0D, 0.32D,
 			WORLD_SWIFT_TRANSFORM_SHAPE);
 
 	private static final BreakerShape FIRST_PERSON_BREAKER_SHAPE = new BreakerShape(

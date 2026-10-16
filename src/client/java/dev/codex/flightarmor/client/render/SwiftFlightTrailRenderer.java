@@ -161,15 +161,24 @@ public final class SwiftFlightTrailRenderer {
 	private static void renderAnchorRibbon(VertexConsumer vertices, Vec3 camera,
 			List<TrailSample> samples, ArmorSemanticAnchor anchor, int subdivisions, float globalFade) {
 		List<CurvePoint> curve = buildCurve(samples, anchor, subdivisions);
-		if (curve.size() < 2) return;
+		int size = curve.size();
+		if (size < 2) return;
 		double width = switch (anchor) {
 			case CHEST_CORE -> 0.145D;
 			case LEFT_PALM, RIGHT_PALM -> 0.095D;
 			default -> 0.110D;
 		};
-		// 外层柔光与高亮内芯都是自定义四边形，不依赖原版粒子。
-		emitRibbon(vertices, camera, curve, width, 150.0F * globalFade, false);
-		emitRibbon(vertices, camera, curve, width * 0.36D, 245.0F * globalFade, true);
+		Vec3[] sides = new Vec3[size];
+		for (int index = 0; index < size; index++) {
+			Vec3 previous = curve.get(Math.max(0, index - 1)).position;
+			Vec3 next = curve.get(Math.min(size - 1, index + 1)).position;
+			Vec3 tangent = next.subtract(previous);
+			Vec3 side = tangent.cross(camera.subtract(curve.get(index).position));
+			sides[index] = side.lengthSqr() < 1.0E-8D ? basis(tangent).first : side.normalize();
+		}
+		// 外层柔光与高亮内芯共用同一组法向向量，避免重复叉乘归一化。
+		emitRibbon(vertices, camera, curve, sides, width, 150.0F * globalFade, false);
+		emitRibbon(vertices, camera, curve, sides, width * 0.36D, 245.0F * globalFade, true);
 	}
 
 	private static List<CurvePoint> buildCurve(List<TrailSample> samples, ArmorSemanticAnchor anchor, int subdivisions) {
@@ -195,17 +204,8 @@ public final class SwiftFlightTrailRenderer {
 	}
 
 	private static void emitRibbon(VertexConsumer vertices, Vec3 camera, List<CurvePoint> curve,
-			double baseWidth, float maximumAlpha, boolean core) {
-		List<Vec3> sides = new ArrayList<>(curve.size());
-		for (int index = 0; index < curve.size(); index++) {
-			Vec3 previous = curve.get(Math.max(0, index - 1)).position;
-			Vec3 next = curve.get(Math.min(curve.size() - 1, index + 1)).position;
-			Vec3 tangent = next.subtract(previous);
-			Vec3 side = tangent.cross(camera.subtract(curve.get(index).position));
-			sides.add(side.lengthSqr() < 1.0E-8D ? basis(tangent).first : side.normalize());
-		}
-
-		for (int index = 0; index < curve.size() - 1; index++) {
+			Vec3[] sides, double baseWidth, float maximumAlpha, boolean core) {
+		for (int index = 0, limit = curve.size() - 1; index < limit; index++) {
 			CurvePoint first = curve.get(index);
 			CurvePoint second = curve.get(index + 1);
 			if (first.position.distanceToSqr(second.position) < 1.0E-8D) continue;
@@ -215,8 +215,8 @@ public final class SwiftFlightTrailRenderer {
 					maximumAlpha * tailAlpha(first.life));
 			Rgba secondColor = trailColor(second.speedProgress, core,
 					maximumAlpha * tailAlpha(second.life));
-			Vec3 firstSide = sides.get(index).scale(firstWidth);
-			Vec3 secondSide = sides.get(index + 1).scale(secondWidth);
+			Vec3 firstSide = sides[index].scale(firstWidth);
+			Vec3 secondSide = sides[index + 1].scale(secondWidth);
 			emitQuad(vertices, camera,
 					first.position.subtract(firstSide), first.position.add(firstSide),
 					second.position.add(secondSide), second.position.subtract(secondSide),
@@ -231,6 +231,13 @@ public final class SwiftFlightTrailRenderer {
 
 	private static Rgba trailColor(float speedProgress, boolean core, float alpha) {
 		FlightLightColorCurve.Rgb color = FlightLightColorCurve.colorAt(speedProgress);
+		if (core) {
+			return new Rgba(
+					Math.min(255, color.red() + 28),
+					Math.min(255, color.green() + 36),
+					Math.min(255, color.blue() + 20),
+					255).alpha(alpha);
+		}
 		return new Rgba(color.red(), color.green(), color.blue(), 255).alpha(alpha);
 	}
 

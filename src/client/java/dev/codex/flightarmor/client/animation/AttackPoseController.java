@@ -10,11 +10,13 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 
 /**
- * 把服务端权威的战斗阶段转成玩家姿势：腕炮后坐、核心束蓄力/释放、俯冲冲击与光刃斩击各有独立通道，
- * 非战斗状态直接返回基础姿势。
- *
- * <p>关节弯曲由 {@link FlightJointAnimation#poseFor(Player, float)} 统一驱动；本类只叠加战斗相关
- * 的关节与 OBJ 装甲偏移，不改动 HumanoidModel 的其余姿态。</p>
+ * 把服务端权威的战斗阶段转成高达机甲风格战斗姿态：
+ * <ul>
+ *   <li>腕炮/步枪射击（R键）：高达经典空中举臂瞄准 + 副手横胸托护传感器 + 前后错腿稳姿</li>
+ *   <li>胸炮/三联齐射（G键）：自由高达「全弹发射（Hi-MAT Full Burst）」昂胸张臂姿态</li>
+ *   <li>光束军刀连斩（左键/J键）：袈裟斜劈 -> 逆风回旋横斩 -> 双手高出力突进破城劈</li>
+ *   <li>陨星俯冲重击（X键）：三点式重装机甲英雄落地冲击姿态</li>
+ * </ul>
  */
 public final class AttackPoseController {
 	private AttackPoseController() {
@@ -101,14 +103,15 @@ public final class AttackPoseController {
 					Mth.clamp(Math.max(phaseWeight, impactImpulse), 0.0F, 1.0F));
 		}
 		if (type == ArmorAttackType.CRUISE_MISSILE_VOLLEY) {
-			FlightPoseFrame volley = bracedFrame(base, -6, -3,
-					-58, -24, -28, 38, -54, 23, 27, 36,
-					-5, -3, -4, 27, -14, 3, 4, 39);
-			return base.lerp(volley, Mth.clamp(Math.max(phaseWeight, 0.82F), 0.0F, 1.0F));
+			FlightPoseFrame volley = bracedFrame(base, -8, -4,
+					-64, -28, -32, 44, -60, 28, 32, 42,
+					-18, -4, -6, 48, -8, 4, 6, 26);
+			return base.lerp(volley, Mth.clamp(Math.max(phaseWeight, 0.84F), 0.0F, 1.0F));
 		}
 		float recoil = left ? leftRecoil : rightRecoil;
 		return wristPose(base, variant, left, phase, progress, recoil);
 	}
+
 	private static FlightPoseFrame applyWristPulse(Player player, FlightPoseFrame base,
 			float partialTick, ArmorCombatPhase phase, float phaseProgress,
 			float leftRecoil, float rightRecoil) {
@@ -118,14 +121,6 @@ public final class AttackPoseController {
 		return wristPose(base, variant, left, phase, phaseProgress, recoil);
 	}
 
-	/**
-	 * A blade strike is a locomotion-compatible overlay rather than another wrist-cannon aim pose.
-	 *
-	 * <p>The authoritative WINDUP loads the torso and blade, then FIRING snaps through
-	 * the target and carries the weapon into follow-through. RECOVERY blends the complete
-	 * skeleton back into the current flight or ground pose. The support arm and the two
-	 * legs use different targets so the player never becomes a mirrored mannequin.</p>
-	 */
 	private static FlightPoseFrame applyBladeSlash(Player player, FlightPoseFrame base,
 			ArmorCombatPhase phase, float phaseProgress) {
 		boolean attackingLeft = ArmorCombatClient.attacksWithLeftHand(player);
@@ -144,12 +139,6 @@ public final class AttackPoseController {
 		return switch (phase) {
 			case WINDUP, CHARGING -> entry.lerp(loaded, bladeAnticipation(phaseProgress));
 			case FIRING -> {
-				/*
-				 * The server now owns a real WINDUP phase and commits the ranged
-				 * blade wave when that phase ends. Start FIRING from the loaded
-				 * keyframe instead of replaying base -> load, otherwise a latency-free
-				 * client visibly snaps the arm backwards on the authoritative strike.
-				 */
 				if (phaseProgress < 0.42F) {
 					yield loaded.lerp(contact, bladeCutIn(phaseProgress / 0.42F));
 				}
@@ -228,6 +217,7 @@ public final class AttackPoseController {
 		FlightPoseFrame target = coreTarget(base, variant);
 		return base.lerp(target, weight);
 	}
+
 	private static FlightPoseFrame applyDiveImpact(Player player, FlightPoseFrame base, float partialTick,
 			ArmorCombatPhase phase, float phaseProgress) {
 		ArmorVariant variant = ModItems.fullSetVariant(player).orElse(ArmorVariant.VANGUARD);
@@ -255,19 +245,24 @@ public final class AttackPoseController {
 			case IDLE -> base.lerp(kick, Mth.clamp(recoil, 0.0F, 1.0F));
 		};
 	}
+
+	/**
+	 * 高达经典举臂射击姿势（Gundam SEED Aerial Rifle / Wrist Aim）：
+	 * 射击臂平举对准视线，副手横在胸前辅助瞄准传感器，双腿一屈一伸形成空中张力。
+	 */
 	private static FlightPoseFrame wristTarget(FlightPoseFrame base, ArmorVariant variant,
 			boolean left) {
 		float side = left ? -1.0F : 1.0F;
 		return switch (variant) {
-			case VANGUARD -> combatFrame(base, -3, 5 * side, -2, -2 * side,
-					-82, -5 * side, -7 * side, 22, -26, 17 * side, 18 * side, 39,
-					-7, 3 * side, 4 * side, 31, 2, -2 * side, -3 * side, 18, left);
-			case SWIFT -> combatFrame(base, -7, 3 * side, -5, -2 * side,
-					-101, -3 * side, -4 * side, 12, 18, 24 * side, 28 * side, 30,
-					3, 2 * side, 3 * side, 16, -15, -3 * side, -4 * side, 34, left);
-			case SENTINEL -> combatFrame(base, 1, 7 * side, -1, -3 * side,
-					-67, -11 * side, -15 * side, 57, -42, 24 * side, 27 * side, 66,
-					-19, 5 * side, 8 * side, 52, -8, -4 * side, -6 * side, 44, left);
+			case VANGUARD -> combatFrame(base, -5, 8 * side, 3, -3 * side,
+					-88, -6 * side, -8 * side, 16, -46, 28 * side, 22 * side, 62,
+					-18, 4 * side, 5 * side, 44, 6, -3 * side, -4 * side, 18, left);
+			case SWIFT -> combatFrame(base, -9, 6 * side, 5, -3 * side,
+					-98, -4 * side, -5 * side, 10, -28, 32 * side, 26 * side, 48,
+					-12, 3 * side, 4 * side, 34, 12, -3 * side, -4 * side, 22, left);
+			case SENTINEL -> combatFrame(base, -2, 10 * side, 2, -4 * side,
+					-76, -10 * side, -14 * side, 42, -54, 34 * side, 28 * side, 72,
+					-24, 6 * side, 8 * side, 56, -8, -4 * side, -6 * side, 38, left);
 		};
 	}
 
@@ -275,38 +270,48 @@ public final class AttackPoseController {
 			boolean left) {
 		float side = left ? -1.0F : 1.0F;
 		return switch (variant) {
-			case VANGUARD -> combatFrame(base, 1, 8 * side, 1, -3 * side,
-					-68, -9 * side, -12 * side, 34, -34, 20 * side, 23 * side, 46,
-					-11, 4 * side, 6 * side, 38, 5, -3 * side, -4 * side, 22, left);
-			case SWIFT -> combatFrame(base, -3, 6 * side, -2, -3 * side,
-					-84, -8 * side, -10 * side, 23, 10, 30 * side, 34 * side, 36,
-					6, 3 * side, 4 * side, 21, -19, -4 * side, -6 * side, 41, left);
-			case SENTINEL -> combatFrame(base, 7, 10 * side, 2, -4 * side,
-					-52, -17 * side, -22 * side, 72, -51, 28 * side, 33 * side, 76,
-					-25, 7 * side, 10 * side, 61, -12, -5 * side, -8 * side, 51, left);
-		};
-	}
-	private static FlightPoseFrame coreTarget(FlightPoseFrame base, ArmorVariant variant) {
-		return switch (variant) {
-			case VANGUARD -> bracedFrame(base, -4, -3,
-					-43, -21, -12, 52, -38, 19, 11, 46, -8, -3, -4, 32, -2, 3, 4, 23);
-			case SWIFT -> bracedFrame(base, -9, -6,
-					-66, -9, -7, 27, -63, 8, 7, 24, 2, -2, -3, 18, -13, 3, 4, 35);
-			case SENTINEL -> bracedFrame(base, 1, -1,
-					-34, -28, -18, 69, -31, 27, 18, 66, -22, -6, -9, 58, -15, 6, 9, 51);
+			case VANGUARD -> combatFrame(base, 2, 11 * side, 1, -4 * side,
+					-72, -10 * side, -14 * side, 32, -52, 30 * side, 25 * side, 68,
+					-22, 5 * side, 7 * side, 50, 8, -4 * side, -5 * side, 22, left);
+			case SWIFT -> combatFrame(base, -3, 9 * side, 2, -4 * side,
+					-84, -8 * side, -11 * side, 22, -34, 35 * side, 30 * side, 54,
+					-16, 4 * side, 5 * side, 40, 14, -4 * side, -5 * side, 28, left);
+			case SENTINEL -> combatFrame(base, 6, 13 * side, 3, -5 * side,
+					-58, -16 * side, -20 * side, 62, -60, 36 * side, 32 * side, 78,
+					-28, 7 * side, 10 * side, 64, -12, -5 * side, -8 * side, 46, left);
 		};
 	}
 
-	private static FlightPoseFrame impactTarget(FlightPoseFrame base, ArmorVariant variant) {
+	/**
+	 * 自由高达「全弹发射（Hi-MAT Full Burst）」胸炮与翼炮齐射姿势：
+	 * 胸膛昂起前推，双臂向斜下方大角度张开稳住反冲力矩，双腿一屈一伸锚定空中重心。
+	 */
+	private static FlightPoseFrame coreTarget(FlightPoseFrame base, ArmorVariant variant) {
 		return switch (variant) {
-			case VANGUARD -> bracedFrame(base, 13, 5,
-					-112, -8, -12, 12, -31, 19, 22, 48, -38, -5, -7, 76, -11, 4, 6, 42);
-			case SWIFT -> bracedFrame(base, -5, 4,
-					-78, -18, -23, 24, -43, 20, 27, 38, -17, -4, -5, 34, 8, 4, 5, 20);
-			case SENTINEL -> bracedFrame(base, 18, 8,
-					-119, -16, -20, 15, -108, 17, 21, 18, -54, -7, -11, 88, -42, 7, 11, 79);
+			case VANGUARD -> bracedFrame(base, -8, 4,
+					-46, -28, -24, 54, -42, 26, 22, 50, -18, -5, -7, 46, -4, 5, 6, 24);
+			case SWIFT -> bracedFrame(base, -11, 6,
+					-64, -18, -16, 34, -60, 16, 15, 32, -12, -4, -5, 36, 6, 4, 5, 22);
+			case SENTINEL -> bracedFrame(base, -5, 3,
+					-38, -34, -26, 68, -36, 34, 26, 66, -24, -7, -10, 62, -14, 7, 10, 48);
 		};
 	}
+
+	/**
+	 * 巴巴托斯/强袭高达三点式超重落地冲击（Superhero Three-Point Mecha Landing）：
+	 * 躯干深俯、单膝大角度屈折缓冲、主战拳砸向地面、副手向后上方展臂平衡。
+	 */
+	private static FlightPoseFrame impactTarget(FlightPoseFrame base, ArmorVariant variant) {
+		return switch (variant) {
+			case VANGUARD -> bracedFrame(base, 18, 6,
+					-118, -10, -14, 14, -26, 24, 28, 52, -46, -6, -9, 84, -8, 5, 7, 36);
+			case SWIFT -> bracedFrame(base, 12, 5,
+					-96, -16, -22, 20, -32, 26, 30, 42, -32, -5, -7, 68, 10, 5, 6, 24);
+			case SENTINEL -> bracedFrame(base, 22, 8,
+					-124, -16, -20, 16, -112, 18, 22, 20, -58, -8, -12, 92, -40, 8, 12, 78);
+		};
+	}
+
 	private static FlightPoseFrame bracedFrame(FlightPoseFrame base,
 			float bodyPitch, float headPitch,
 			float leftArmPitch, float leftArmYaw, float leftArmRoll, float leftElbow,
@@ -326,6 +331,7 @@ public final class AttackPoseController {
 				base.leftKneeBend() + degrees(leftKnee),
 				base.rightKneeBend() + degrees(rightKnee));
 	}
+
 	private static FlightPoseFrame combatFrame(FlightPoseFrame base,
 			float bodyPitch, float bodyRoll, float headPitch, float headRoll,
 			float attackArmPitch, float attackArmYaw, float attackArmRoll, float attackElbow,
@@ -365,6 +371,7 @@ public final class AttackPoseController {
 				base.leftKneeBend() + degrees(attackingLeft ? attackKnee : supportKnee),
 				base.rightKneeBend() + degrees(attackingLeft ? supportKnee : attackKnee));
 	}
+
 	private static float bladeAnticipation(float value) {
 		float t = Mth.clamp(value, 0.0F, 1.0F);
 		float inverse = 1.0F - t;
@@ -418,135 +425,115 @@ public final class AttackPoseController {
 			};
 		}
 
-		/** Vanguard: advancing shoulder cut, reverse waist cut, then a committed drive cleave. */
+		/**
+		 * Vanguard Beam Saber Combo:
+		 * Step 0: 高达大角度拔刀袈裟斩（Overhead Diagonal Saber Cleave）
+		 * Step 1: 转腰逆风水平闪光斩（Reverse Spinning Horizontal Slash）
+		 * Step 2: 突进双手高出力纵劈（Lunging Overhead Buster Slash）
+		 */
 		private static BladeAngles vanguardCombo(int step, BladeBeat beat) {
 			if (step == 0) return switch (beat) {
-				case LOAD -> new BladeAngles(-6, -12, -2, 3, -38, 48, 32, 58,
-						-24, 20, 17, 31, -13, 4, 6, 32, 8, -3, -4, 18);
-				case CONTACT -> new BladeAngles(-10, 14, -4, -5, -108, -55, -24, 10,
-						-42, -18, 22, 41, 11, -5, -7, 17, -16, 4, 6, 38);
-				case FOLLOW_THROUGH -> new BladeAngles(-6, 17, 1, -5, -62, -68, -35, 31,
-						-31, -13, 24, 43, 16, -4, -5, 22, -10, 5, 7, 31);
+				case LOAD -> new BladeAngles(-8, -16, -3, 4, -128, 44, 34, 62,
+						-28, 24, 20, 36, -18, 5, 7, 42, 10, -4, -5, 20);
+				case CONTACT -> new BladeAngles(-14, 18, 4, -6, -64, -62, -28, 12,
+						-46, -22, 26, 48, 14, -6, -8, 20, -20, 5, 7, 46);
+				case FOLLOW_THROUGH -> new BladeAngles(-8, 22, 2, -6, -42, -74, -38, 32,
+						-34, -16, 28, 46, 18, -5, -6, 26, -14, 6, 8, 36);
 			};
 			if (step == 1) return switch (beat) {
-				case LOAD -> new BladeAngles(-5, 16, -2, -3, -44, -52, -28, 61,
-						-30, 27, 20, 38, 8, -3, -4, 20, -13, 4, 6, 34);
-				case CONTACT -> new BladeAngles(-9, -15, -4, 5, -101, 58, 26, 12,
-						-46, 22, -24, 44, -15, 5, 7, 39, 10, -4, -6, 18);
-				case FOLLOW_THROUGH -> new BladeAngles(-5, -18, 1, 5, -58, 67, 33, 33,
-						-34, 16, -27, 46, -9, 5, 7, 32, 15, -4, -5, 23);
+				case LOAD -> new BladeAngles(-6, 20, -2, -4, -52, -58, -32, 64,
+						-34, 30, 22, 42, 10, -4, -5, 24, -16, 5, 7, 40);
+				case CONTACT -> new BladeAngles(-12, -19, 4, 6, -96, 64, 32, 10,
+						-50, 26, -28, 48, -18, 6, 8, 46, 12, -5, -7, 20);
+				case FOLLOW_THROUGH -> new BladeAngles(-7, -22, 2, 6, -54, 74, 38, 34,
+						-38, 18, -30, 50, -12, 6, 8, 36, 16, -5, -6, 26);
 			};
 			return switch (beat) {
-				case LOAD -> new BladeAngles(-12, -3, -5, 1, -72, 14, 10, 71,
-						-43, -24, -16, 52, -17, 5, 7, 43, 9, -4, -6, 27);
-				case CONTACT -> new BladeAngles(-17, 9, -7, -4, -132, -17, -12, 7,
-						-58, 28, 21, 46, 13, -6, -8, 22, -21, 5, 8, 48);
-				case FOLLOW_THROUGH -> new BladeAngles(-9, 15, 0, -5, -87, -49, -29, 29,
-						-47, 19, 24, 49, 18, -5, -7, 28, -13, 6, 9, 39);
+				case LOAD -> new BladeAngles(-16, -4, -6, 2, -144, 12, 8, 72,
+						-96, -22, -16, 58, -22, 6, 8, 52, 12, -5, -7, 30);
+				case CONTACT -> new BladeAngles(-22, 12, 6, -5, -52, -20, -14, 8,
+						-64, 30, 24, 48, 16, -7, -9, 24, -26, 6, 9, 56);
+				case FOLLOW_THROUGH -> new BladeAngles(-12, 18, 2, -6, -36, -52, -32, 28,
+						-50, 22, 26, 52, 20, -6, -8, 30, -16, 7, 10, 44);
 			};
 		}
 
-		/** Sentinel: armored hook, counter-sweep, then a two-arm breaker committed through the hips. */
+		/**
+		 * Sentinel Heavy Hyper Beam Greatsword Combo:
+		 * Step 0: 重装蓄力斜向断舰斩
+		 * Step 1: 旋转重锤逆劈
+		 * Step 2: 双手合握大剑破城纵斩（サンライズ立ち / 勇者一字斩收刀）
+		 */
 		private static BladeAngles sentinelHeavyCombo(int step, BladeBeat beat) {
 			if (step == 0) return switch (beat) {
-				case LOAD -> new BladeAngles(-3, -14, -1, 3, -27, 39, 42, 63,
-						-49, 18, 29, 59, -20, 6, 9, 54, -8, -5, -8, 45);
-				case CONTACT -> new BladeAngles(2, 17, -3, -5, -88, -63, -35, 23,
-						-65, -29, 35, 71, -27, 7, 11, 67, -15, -6, -9, 57);
-				case FOLLOW_THROUGH -> new BladeAngles(0, 20, 1, -5, -49, -79, -43, 43,
-						-56, -20, 39, 73, -22, 6, 10, 61, -11, -5, -8, 52);
+				case LOAD -> new BladeAngles(-5, -18, -2, 4, -118, 38, 42, 66,
+						-54, 22, 32, 62, -24, 7, 10, 58, -10, -6, -9, 48);
+				case CONTACT -> new BladeAngles(4, 20, 4, -6, -68, -68, -38, 20,
+						-68, -32, 38, 74, -30, 8, 12, 70, -18, -7, -10, 60);
+				case FOLLOW_THROUGH -> new BladeAngles(1, 24, 2, -6, -44, -82, -46, 42,
+						-58, -22, 42, 76, -24, 7, 11, 64, -14, -6, -9, 54);
 			};
 			if (step == 1) return switch (beat) {
-				case LOAD -> new BladeAngles(1, 18, -2, -4, -33, -59, -39, 66,
-						-63, 33, 41, 79, -10, -5, -8, 47, -22, 7, 10, 59);
-				case CONTACT -> new BladeAngles(4, -19, -4, 6, -93, 68, 40, 19,
-						-72, 38, -43, 67, -17, -6, -10, 58, -28, 8, 12, 69);
-				case FOLLOW_THROUGH -> new BladeAngles(1, -21, 1, 6, -52, 82, 46, 45,
-						-61, 27, -41, 72, -13, -5, -8, 52, -24, 7, 11, 63);
+				case LOAD -> new BladeAngles(2, 22, -2, -5, -42, -64, -42, 68,
+						-66, 36, 44, 80, -12, -6, -9, 50, -24, 8, 11, 62);
+				case CONTACT -> new BladeAngles(6, -22, 4, 7, -92, 72, 44, 18,
+						-76, 40, -46, 70, -20, -7, -11, 62, -30, 9, 13, 72);
+				case FOLLOW_THROUGH -> new BladeAngles(2, -25, 2, 7, -50, 86, 48, 44,
+						-64, 28, -44, 74, -15, -6, -9, 54, -26, 8, 12, 66);
 			};
 			return switch (beat) {
-				case LOAD -> new BladeAngles(-16, 0, -5, 0, -91, 7, 5, 77,
-						-83, -9, -6, 79, -34, -8, -13, 82, -29, 8, 13, 76);
-				case CONTACT -> new BladeAngles(-21, 0, -8, 0, -143, -6, -4, 11,
-						-133, 9, 6, 15, -12, -7, -11, 62, -39, 9, 15, 92);
-				case FOLLOW_THROUGH -> new BladeAngles(-12, 0, -1, 0, -99, -33, -23, 41,
-						-92, 29, 20, 47, -7, -6, -9, 55, -31, 8, 13, 83);
+				case LOAD -> new BladeAngles(-20, 0, -8, 0, -148, 6, 4, 78,
+						-136, -8, -6, 80, -38, -9, -14, 86, -32, 9, 14, 78);
+				case CONTACT -> new BladeAngles(-24, 0, 8, 0, -48, -8, -6, 10,
+						-56, 10, 8, 14, -14, -8, -12, 66, -42, 10, 16, 94);
+				case FOLLOW_THROUGH -> new BladeAngles(-14, 0, 2, 0, -32, -36, -26, 38,
+						-88, 32, 22, 48, -8, -7, -10, 58, -34, 9, 14, 86);
 			};
 		}
+
+		/**
+		 * Swift GN Twin Beam Tonfa Combo:
+		 * Step 0: 能天使高速交叉突刺斩
+		 * Step 1: 双刃回旋剪刀斩
+		 * Step 2: Trans-Am 十字双刀疾风裂斩
+		 */
 		private static BladeAngles swiftDualCombo(int comboStep, BladeBeat beat) {
 			if (comboStep == 0) {
 				return switch (beat) {
-					case LOAD -> new BladeAngles(-5, -8, -2, 2,
-							-31, 49, 31, 51, -35, -45, -29, 48,
-							-9, 3, 4, 25, 5, -2, -3, 18);
-					case CONTACT -> new BladeAngles(-9, 10, -4, -4,
-							-105, -54, -24, 13, -96, -48, 22, 16,
-							7, -4, -5, 16, -12, 3, 5, 31);
-					case FOLLOW_THROUGH -> new BladeAngles(-6, 13, 0, -4,
-							-61, -67, -31, 28, -57, -60, 27, 31,
-							12, -3, -4, 19, -8, 4, 6, 27);
+					case LOAD -> new BladeAngles(-8, -12, -3, 3,
+							-116, 48, 32, 54, -42, -48, -32, 52,
+							-12, 4, 5, 32, 8, -3, -4, 20);
+					case CONTACT -> new BladeAngles(-14, 14, 5, -5,
+							-68, -58, -26, 12, -102, -52, 24, 16,
+							10, -5, -6, 18, -16, 4, 6, 38);
+					case FOLLOW_THROUGH -> new BladeAngles(-9, 17, 2, -5,
+							-48, -70, -34, 28, -62, -64, 30, 32,
+							14, -4, -5, 22, -10, 5, 7, 30);
 				};
 			}
 			if (comboStep == 1) {
 				return switch (beat) {
-					case LOAD -> new BladeAngles(-5, 8, -2, -2,
-							-36, -47, -30, 49, -30, 50, 29, 52,
-							5, -3, -4, 18, -9, 2, 3, 26);
-					case CONTACT -> new BladeAngles(-9, -10, -4, 4,
-							-97, 49, 23, 16, -106, 55, -25, 13,
-							-12, 4, 5, 31, 7, -3, -5, 16);
-					case FOLLOW_THROUGH -> new BladeAngles(-6, -13, 0, 4,
-							-58, 61, 28, 31, -62, 68, -32, 28,
-							-8, 4, 6, 27, 12, -3, -4, 19);
+					case LOAD -> new BladeAngles(-8, 12, -3, -3,
+							-44, -50, -32, 52, -116, 52, 32, 54,
+							8, -4, -5, 20, -12, 3, 4, 32);
+					case CONTACT -> new BladeAngles(-14, -14, 5, 5,
+							-102, 52, 24, 16, -68, 58, -26, 12,
+							-16, 5, 6, 38, 10, -4, -6, 18);
+					case FOLLOW_THROUGH -> new BladeAngles(-9, -17, 2, 5,
+							-62, 64, 30, 32, -48, 70, -34, 28,
+							-10, 5, 7, 30, 14, -4, -5, 22);
 				};
 			}
 			return switch (beat) {
-				case LOAD -> new BladeAngles(-8, 0, -5, 0,
-						-54, 12, 8, 57, -54, -12, -8, 57,
-						-12, 3, 4, 34, -7, -3, -4, 27);
-				case CONTACT -> new BladeAngles(-14, 0, -7, 0,
-						-103, 5, 2, 12, -103, -5, -2, 12,
-						8, -3, -4, 18, -15, 3, 5, 39);
-				case FOLLOW_THROUGH -> new BladeAngles(-8, 0, -1, 0,
-						-72, 10, 12, 27, -72, -10, -12, 27,
-						12, -3, -4, 22, -10, 4, 6, 33);
-			};
-		}
-		private BladeAngles stylize(ArmorVariant variant, int comboStep, BladeBeat beat) {
-			if (comboStep == 0) return this;
-			if (comboStep == 1) {
-				/* Reverse waist cut: invert the lateral load without mirroring both limbs together. */
-				return new BladeAngles(
-						bodyPitch - 1.5F, -bodyRoll * 0.82F, headPitch, -headRoll,
-						attackArmPitch + 7.0F, -attackArmYaw * 0.88F,
-						-attackArmRoll * 0.72F, attackElbow + 5.0F,
-						supportArmPitch - 6.0F, -supportArmYaw * 0.70F,
-						-supportArmRoll * 0.64F, supportElbow + 8.0F,
-						attackLegPitch - 3.0F, -attackLegYaw, -attackLegRoll, attackKnee + 4.0F,
-						supportLegPitch + 4.0F, -supportLegYaw, -supportLegRoll, supportKnee + 7.0F);
-			}
-			/* Third hit: armor-specific committed cleave with a guarded support arm. */
-			float heavy = variant == ArmorVariant.SENTINEL ? 1.18F
-					: variant == ArmorVariant.SWIFT ? 0.90F : 1.0F;
-			return switch (beat) {
-				case LOAD -> new BladeAngles(
-						-10.0F * heavy, -4.0F, -4.0F, 2.0F,
-						-66.0F, 20.0F, 14.0F, 68.0F,
-						-34.0F, -20.0F, -12.0F, 48.0F,
-						-14.0F, 4.0F, 5.0F, 37.0F,
-						8.0F, -3.0F, -4.0F, 21.0F);
-				case CONTACT -> new BladeAngles(
-						-14.0F * heavy, 8.0F, -6.0F, -3.0F,
-						-124.0F, -18.0F, -10.0F, 9.0F,
-						-52.0F, 24.0F, 18.0F, 40.0F,
-						10.0F, -5.0F, -6.0F, 20.0F,
-						-18.0F, 4.0F, 6.0F, 42.0F);
-				case FOLLOW_THROUGH -> new BladeAngles(
-						-8.0F * heavy, 13.0F, 0.0F, -5.0F,
-						-82.0F, -44.0F, -26.0F, 28.0F,
-						-43.0F, 16.0F, 20.0F, 44.0F,
-						15.0F, -4.0F, -5.0F, 25.0F,
-						-11.0F, 5.0F, 7.0F, 35.0F);
+				case LOAD -> new BladeAngles(-12, 0, -6, 0,
+						-134, 18, 12, 60, -134, -18, -12, 60,
+						-16, 4, 5, 42, -10, -4, -5, 32);
+				case CONTACT -> new BladeAngles(-18, 0, 7, 0,
+						-56, -42, -24, 10, -56, 42, 24, 10,
+						12, -4, -5, 20, -20, 4, 6, 46);
+				case FOLLOW_THROUGH -> new BladeAngles(-10, 0, 2, 0,
+						-42, -58, -32, 26, -42, 58, 32, 26,
+						16, -4, -5, 24, -14, 5, 7, 36);
 			};
 		}
 	}

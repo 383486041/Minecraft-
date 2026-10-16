@@ -24,6 +24,7 @@ public final class ArmorIdentity {
 	private static final String SLOT_KEY = "Slot";
 	private static final String VERSION_KEY = "Version";
 	private static final int FORMAT_VERSION = 1;
+	private static volatile CachedIdentity lastRead;
 
 	private ArmorIdentity() {
 	}
@@ -32,19 +33,33 @@ public final class ArmorIdentity {
 		if (stack.isEmpty()) return Optional.empty();
 		CustomData data = stack.get(DataComponents.CUSTOM_DATA);
 		if (data == null) return Optional.empty();
-		CompoundTag root = data.copyTag();
-		if (!root.contains(ROOT_KEY, CompoundTag.TAG_COMPOUND)) return Optional.empty();
+		CachedIdentity cached = lastRead;
+		Identity raw;
+		if (cached != null && cached.data == data) {
+			raw = cached.identity;
+		} else {
+			raw = parseRawIdentity(data.copyTag());
+			lastRead = new CachedIdentity(data, raw);
+		}
+		if (raw == null || !ModItems.isExactFlightArmor(stack, raw.slot())) {
+			return Optional.empty();
+		}
+		return Optional.of(raw);
+	}
+
+	private static Identity parseRawIdentity(CompoundTag root) {
+		if (!root.contains(ROOT_KEY, CompoundTag.TAG_COMPOUND)) return null;
 		CompoundTag identity = root.getCompound(ROOT_KEY);
-		if (identity.getInt(VERSION_KEY) != FORMAT_VERSION) return Optional.empty();
-		if (!identity.hasUUID(OWNER_KEY) || !identity.hasUUID(SUIT_KEY)) return Optional.empty();
+		if (identity.getInt(VERSION_KEY) != FORMAT_VERSION) return null;
+		if (!identity.hasUUID(OWNER_KEY) || !identity.hasUUID(SUIT_KEY)) return null;
 		EquipmentSlot slot;
 		try {
 			slot = EquipmentSlot.valueOf(identity.getString(SLOT_KEY));
 		} catch (IllegalArgumentException ignored) {
-			return Optional.empty();
+			return null;
 		}
-		if (!isArmorSlot(slot) || !ModItems.isExactFlightArmor(stack, slot)) return Optional.empty();
-		return Optional.of(new Identity(identity.getUUID(OWNER_KEY), identity.getUUID(SUIT_KEY), slot));
+		if (!isArmorSlot(slot)) return null;
+		return new Identity(identity.getUUID(OWNER_KEY), identity.getUUID(SUIT_KEY), slot);
 	}
 
 	/** 给尚未认主的部件写入身份；已有身份必须与请求完全一致。 */
@@ -65,7 +80,9 @@ public final class ArmorIdentity {
 		identity.putUUID(SUIT_KEY, suitId);
 		identity.putString(SLOT_KEY, slot.name());
 		root.put(ROOT_KEY, identity);
-		stack.set(DataComponents.CUSTOM_DATA, CustomData.of(root));
+		CustomData updated = CustomData.of(root);
+		stack.set(DataComponents.CUSTOM_DATA, updated);
+		lastRead = new CachedIdentity(updated, new Identity(ownerId, suitId, slot));
 		return true;
 	}
 
@@ -101,5 +118,8 @@ public final class ArmorIdentity {
 		public boolean matches(UUID expectedOwner, UUID expectedSuit, EquipmentSlot expectedSlot) {
 			return ownerId.equals(expectedOwner) && suitId.equals(expectedSuit) && slot == expectedSlot;
 		}
+	}
+
+	private record CachedIdentity(CustomData data, Identity identity) {
 	}
 }

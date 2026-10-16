@@ -19,6 +19,7 @@ public final class ArmorVariantData {
 	private static final String VERSION_KEY = "Version";
 	private static final String VARIANT_KEY = "Variant";
 	private static final int FORMAT_VERSION = 1;
+	private static volatile CachedVariant lastRead;
 
 	private ArmorVariantData() {
 	}
@@ -33,7 +34,17 @@ public final class ArmorVariantData {
 		if (stack == null || stack.isEmpty()) return Optional.empty();
 		CustomData data = stack.get(DataComponents.CUSTOM_DATA);
 		if (data == null) return Optional.empty();
+		CachedVariant cached = lastRead;
+		if (cached != null && cached.data == data) {
+			return cached.result;
+		}
 		CompoundTag customRoot = data.copyTag();
+		Optional<ArmorVariant> parsed = parseExplicit(customRoot);
+		lastRead = new CachedVariant(data, parsed);
+		return parsed;
+	}
+
+	private static Optional<ArmorVariant> parseExplicit(CompoundTag customRoot) {
 		if (!customRoot.contains(ROOT_KEY, CompoundTag.TAG_COMPOUND)) return Optional.empty();
 		CompoundTag variantRoot = customRoot.getCompound(ROOT_KEY);
 		if (variantRoot.getInt(VERSION_KEY) != FORMAT_VERSION) return Optional.empty();
@@ -52,7 +63,9 @@ public final class ArmorVariantData {
 		variantRoot.putInt(VERSION_KEY, FORMAT_VERSION);
 		variantRoot.putString(VARIANT_KEY, variant.serializedName());
 		customRoot.put(ROOT_KEY, variantRoot);
-		stack.set(DataComponents.CUSTOM_DATA, CustomData.of(customRoot));
+		CustomData updated = CustomData.of(customRoot);
+		stack.set(DataComponents.CUSTOM_DATA, updated);
+		lastRead = new CachedVariant(updated, Optional.of(variant));
 		return true;
 	}
 
@@ -69,6 +82,10 @@ public final class ArmorVariantData {
 		} else {
 			stack.set(DataComponents.CUSTOM_DATA, CustomData.of(customRoot));
 		}
+		lastRead = null;
 		return true;
+	}
+
+	private record CachedVariant(CustomData data, Optional<ArmorVariant> result) {
 	}
 }

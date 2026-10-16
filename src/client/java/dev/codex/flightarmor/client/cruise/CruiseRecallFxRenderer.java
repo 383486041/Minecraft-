@@ -3,7 +3,10 @@ package dev.codex.flightarmor.client.cruise;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import dev.codex.flightarmor.client.assembly.ArmorAssemblyClient;
 import dev.codex.flightarmor.client.settings.FlightArmorClientSettingsStore;
+import dev.codex.flightarmor.configuration.ArmorConfigurationAccess;
+import dev.codex.flightarmor.configuration.ArmorConfigurationData;
 import dev.codex.flightarmor.cruise.ArmorCruisePhase;
 import dev.codex.flightarmor.flight.FlightPhysics;
 import dev.codex.flightarmor.mixin.RenderTypeInvoker;
@@ -14,16 +17,17 @@ import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 独立巡航战甲的无纹理空气压缩场。
+ * 独立巡航战甲的无纹理空气压缩场与全流程变形能量场。
  *
- * <p>强度只由载体在本客户端 tick 的真实可见位移决定。阶段仅用于找到仍然存在的
- * 召回载体，不参与速度或透明度计算；位移归零后不保存尾迹状态，因此同帧至多下一
- * 个客户端 tick 就会完全消失。</p>
+ * <p>音障压缩场强度只由载体在本客户端 tick 的真实可见位移决定；此外为整甲包覆（DOCKING）、
+ * 巡航脱甲（DEPLOYING）、折跃（PHASING）、分件磁吸着装/脱甲以及守望型双形态切换（M/H）
+ * 提供无纹理几何扫描环、导轨光带与核心锁定脉冲特效。</p>
  */
 final class CruiseRecallFxRenderer {
 	/** 与玩家测速 HUD 使用同一游戏性音速：5 格/秒，即 0.25 格/tick。 */
@@ -35,6 +39,10 @@ final class CruiseRecallFxRenderer {
 	private static final Rgba AIR_WHITE = new Rgba(232, 250, 255, 255);
 	private static final Rgba AIR_CYAN = new Rgba(112, 224, 244, 255);
 	private static final Rgba ION_VIOLET = new Rgba(184, 142, 246, 255);
+	private static final Rgba LOCK_GOLD = new Rgba(255, 214, 96, 255);
+	private static final EquipmentSlot[] ASSEMBLY_SLOTS = {
+			EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD
+	};
 	private static boolean initialized;
 
 	private CruiseRecallFxRenderer() {
@@ -56,11 +64,43 @@ final class CruiseRecallFxRenderer {
 		VertexConsumer vertices = context.consumers().getBuffer(RecallRenderType.INSTANCE);
 
 		for (ArmorCruiseClient.CruiseState state : ArmorCruiseClient.states()) {
-			// 这里只做载体生命周期过滤；音障强度绝不读取 phase、距离或目标速度。
-			if (state.phase() != ArmorCruisePhase.RECALLING) continue;
 			Entity resolved = ArmorCruiseClient.resolveCarrier(client, state);
 			if (!(resolved instanceof LivingEntity carrier)
 					|| ArmorCruiseClient.isRetiredCarrier(carrier)) continue;
+
+			Vec3 current = carrier.getPosition(partialTick).add(0.0D, 0.92D, 0.0D);
+			if (camera.distanceToSqr(current) > 180.0D * 180.0D) continue;
+			Player owner = ArmorCruiseClient.ownerOfCarrier(carrier);
+			boolean ownerFirstPerson = owner == client.player
+					&& client.options.getCameraType().isFirstPerson();
+			double flowTime = carrier.tickCount + partialTick;
+
+			if (state.phase() == ArmorCruisePhase.DOCKING) {
+				if (!ownerFirstPerson) {
+					float dockingProgress = ArmorCruiseClient.dockingProgress(carrier, partialTick);
+					renderDockingScanField(vertices, camera, carrier, owner, dockingProgress, partialTick, flowTime);
+				}
+				continue;
+			}
+			if (state.phase() == ArmorCruisePhase.PHASING) {
+				if (!ownerFirstPerson) {
+					float phasingProgress = ArmorCruiseClient.phasingProgress(carrier, partialTick);
+					renderPhasingWarpField(vertices, camera, current, phasingProgress, flowTime);
+				}
+				continue;
+			}
+			if (state.phase() == ArmorCruisePhase.DEPLOYING) {
+				if (!ownerFirstPerson) {
+					CruiseDeploymentTimeline.Sample sample = CruiseDeploymentClient.carrierSample(carrier, partialTick);
+					if (sample != null) {
+						renderDeployingLaunchField(vertices, camera, carrier, owner, sample, partialTick, flowTime);
+					}
+				}
+				continue;
+			}
+
+			// 这里只做载体生命周期过滤；音障强度绝不读取 phase、距离或目标速度。
+			if (state.phase() != ArmorCruisePhase.RECALLING) continue;
 
 			Vec3 tickStart = carrier.getPosition(0.0F);
 			Vec3 tickEnd = carrier.getPosition(1.0F);
@@ -73,13 +113,7 @@ final class CruiseRecallFxRenderer {
 					(float) FULL_COMPRESSION_MACH, (float) mach);
 			if (compression <= 0.002F) continue;
 
-			Vec3 current = carrier.getPosition(partialTick).add(0.0D, 0.92D, 0.0D);
-			if (camera.distanceToSqr(current) > 180.0D * 180.0D) continue;
 			Vec3 direction = tickMotion.scale(1.0D / blocksPerTick);
-			Player owner = ArmorCruiseClient.ownerOfCarrier(carrier);
-			boolean ownerFirstPerson = owner == client.player
-					&& client.options.getCameraType().isFirstPerson();
-
 			double length = Mth.lerp(compression, 8.0D, 25.0D);
 			Vec3 tail = current.subtract(direction.scale(length));
 			float cameraVisibility = firstPersonVisibility(camera, current, tail,
@@ -88,7 +122,147 @@ final class CruiseRecallFxRenderer {
 			if (strength <= 0.002F) continue;
 
 			renderAirField(vertices, camera, current, direction, mach, length,
-					strength, carrier.tickCount + partialTick);
+					strength, flowTime);
+		}
+
+		// 玩家本地变形特效：分件磁吸着装/脱甲、守望型 M 键双形态重构与 H 键僚机折跃
+		double gameTime = context.world().getGameTime() + partialTick;
+		for (Player player : context.world().players()) {
+			if (player.isRemoved()) continue;
+			boolean localFirstPerson = player == client.player
+					&& client.options.getCameraType().isFirstPerson();
+			if (localFirstPerson) continue;
+			Vec3 basePos = player.getPosition(partialTick);
+			if (camera.distanceToSqr(basePos) > 128.0D * 128.0D) continue;
+
+			if (ArmorAssemblyClient.isAnimating(player)) {
+				renderAssemblyMagneticField(vertices, camera, player, basePos, partialTick, gameTime);
+			}
+			ArmorConfigurationAccess.ConfiguredSentinel sentinel =
+					ArmorConfigurationAccess.configuredSentinel(player).orElse(null);
+			if (sentinel != null) {
+				ArmorConfigurationData.Snapshot snapshot = sentinel.snapshot();
+				if (ArmorConfigurationAccess.isTransitioning(snapshot, (long) gameTime)) {
+					float elapsed = (float) Math.max(0.0D, gameTime - snapshot.transitionStartTick());
+					float progress = Mth.clamp(elapsed / ArmorConfigurationAccess.TRANSITION_DURATION_TICKS, 0.0F, 1.0F);
+					renderSentinelReconfigField(vertices, camera, basePos, progress, gameTime);
+				} else if (ArmorConfigurationAccess.isWingmenTransitioning(snapshot, (long) gameTime)) {
+					float elapsed = (float) Math.max(0.0D, gameTime - snapshot.wingmenTransitionStartTick());
+					float progress = Mth.clamp(elapsed / ArmorConfigurationAccess.WINGMEN_TRANSITION_DURATION_TICKS, 0.0F, 1.0F);
+					renderSentinelWingmanSocketField(vertices, camera, player, basePos, progress, gameTime);
+				}
+			}
+		}
+	}
+
+	private static void renderDockingScanField(VertexConsumer vertices, Vec3 camera,
+			LivingEntity carrier, Player owner, float progress, float partialTick, double flowTime) {
+		Vec3 anchor = (owner != null ? owner.getPosition(partialTick) : carrier.getPosition(partialTick));
+		Basis upBasis = basis(WORLD_UP);
+		float wrapSweep = smoothstep(DockingTimeline.FRAME_START, DockingTimeline.CORE_START, progress);
+		float envelope = Mth.sin(Mth.clamp(progress, 0.0F, 1.0F) * Mth.PI);
+		if (envelope > 0.01F) {
+			double scanY = Mth.lerp(wrapSweep, 0.18D, 1.72D);
+			double scanRadius = 0.52D + 0.16D * Math.sin(wrapSweep * Math.PI);
+			Rgba scanColor = mix(AIR_CYAN, ION_VIOLET, wrapSweep);
+			renderBrokenRing(vertices, camera, anchor.add(0.0D, scanY, 0.0D), WORLD_UP, upBasis,
+					scanRadius, 0.065D, 20, flowTime * 0.28D, scanColor, 145.0F * envelope);
+			renderBrokenRing(vertices, camera, anchor.add(0.0D, 1.85D - scanY * 0.85D, 0.0D), WORLD_UP, upBasis,
+					scanRadius * 0.84D, 0.045D, 16, -flowTime * 0.34D, AIR_WHITE, 110.0F * envelope);
+		}
+		if (progress >= DockingTimeline.CORE_START) {
+			float corePulse = Mth.sin(smoothstep(DockingTimeline.CORE_START, DockingTimeline.END, progress) * Mth.PI);
+			if (corePulse > 0.01F) {
+				Vec3 corePos = anchor.add(0.0D, 1.18D, 0.0D);
+				renderBrokenRing(vertices, camera, corePos, WORLD_UP, upBasis,
+						0.36D + 0.42D * (1.0F - corePulse), 0.075D, 18, flowTime * 0.45D,
+						AIR_WHITE, 185.0F * corePulse);
+			}
+		}
+	}
+
+	private static void renderPhasingWarpField(VertexConsumer vertices, Vec3 camera,
+			Vec3 center, float progress, double flowTime) {
+		Basis upBasis = basis(WORLD_UP);
+		float fold = progress < 0.5F
+				? smoothstep(0.0F, 0.5F, progress)
+				: 1.0F - smoothstep(0.5F, 1.0F, progress);
+		double radius = Mth.lerp(fold, 0.95D, 0.22D);
+		Rgba color = mix(AIR_CYAN, ION_VIOLET, fold);
+		for (int i = -1; i <= 1; i++) {
+			Vec3 ringCenter = center.add(0.0D, i * 0.42D * (1.0F - 0.55F * fold), 0.0D);
+			renderBrokenRing(vertices, camera, ringCenter, WORLD_UP, upBasis,
+					radius * (1.0D - Math.abs(i) * 0.16D), 0.07D, 18,
+					flowTime * 0.35D + i * 1.1D, color, 160.0F * (0.35F + 0.65F * fold));
+		}
+	}
+
+	private static void renderDeployingLaunchField(VertexConsumer vertices, Vec3 camera,
+			LivingEntity carrier, Player owner, CruiseDeploymentTimeline.Sample sample,
+			float partialTick, double flowTime) {
+		Vec3 carrierPos = carrier.getPosition(partialTick).add(0.0D, 0.95D, 0.0D);
+		Basis upBasis = basis(WORLD_UP);
+		float open = sample.open();
+		float pulse = Mth.sin(Mth.clamp(sample.travel(), 0.0F, 1.0F) * Mth.PI);
+		if (pulse <= 0.01F) return;
+		renderBrokenRing(vertices, camera, carrierPos, WORLD_UP, upBasis,
+				0.48D + 0.55D * open, 0.065D, 18, flowTime * 0.32D,
+				mix(AIR_CYAN, AIR_WHITE, 0.45F), 150.0F * pulse);
+		if (owner != null) {
+			Vec3 ownerPos = owner.getPosition(partialTick).add(0.0D, 1.02D, 0.0D);
+			Vec3 mid = ownerPos.lerp(carrierPos, 0.5D);
+			renderBrokenRing(vertices, camera, mid, carrierPos.subtract(ownerPos),
+					basis(carrierPos.subtract(ownerPos)), 0.34D + 0.25D * pulse, 0.05D, 14,
+					-flowTime * 0.40D, ION_VIOLET, 120.0F * pulse);
+		}
+	}
+
+	private static void renderAssemblyMagneticField(VertexConsumer vertices, Vec3 camera,
+			Player player, Vec3 basePos, float partialTick, double flowTime) {
+		float overall = ArmorAssemblyClient.assemblyProgress(player, partialTick);
+		float envelope = Mth.sin(Mth.clamp(overall, 0.0F, 1.0F) * Mth.PI);
+		if (envelope <= 0.01F) return;
+		Basis upBasis = basis(WORLD_UP);
+		double[] heights = { 0.22D, 0.68D, 1.16D, 1.64D };
+		double[] radii = { 0.34D, 0.42D, 0.52D, 0.38D };
+		for (int i = 0; i < ASSEMBLY_SLOTS.length; i++) {
+			if (!ArmorAssemblyClient.affectsSlot(player, ASSEMBLY_SLOTS[i])) continue;
+			Vec3 ringPos = basePos.add(0.0D, heights[i], 0.0D);
+			Rgba ringColor = mix(AIR_CYAN, ION_VIOLET, (float) i / (ASSEMBLY_SLOTS.length - 1));
+			renderBrokenRing(vertices, camera, ringPos, WORLD_UP, upBasis,
+					radii[i] * (0.85D + 0.28D * envelope), 0.052D, 16,
+					flowTime * 0.32D + i * 0.85D, ringColor, 132.0F * envelope);
+		}
+	}
+
+	private static void renderSentinelReconfigField(VertexConsumer vertices, Vec3 camera,
+			Vec3 basePos, float progress, double flowTime) {
+		float pulse = Mth.sin(progress * Mth.PI);
+		if (pulse <= 0.01F) return;
+		Basis upBasis = basis(WORLD_UP);
+		double sweepY = Mth.lerp(progress, 0.25D, 1.68D);
+		Rgba primary = mix(LOCK_GOLD, AIR_CYAN, progress);
+		renderBrokenRing(vertices, camera, basePos.add(0.0D, sweepY, 0.0D), WORLD_UP, upBasis,
+				0.58D + 0.26D * pulse, 0.072D, 20, flowTime * 0.38D, primary, 168.0F * pulse);
+		renderBrokenRing(vertices, camera, basePos.add(0.0D, 1.18D, 0.0D), WORLD_UP, upBasis,
+				0.46D + 0.52D * progress, 0.055D, 18, -flowTime * 0.42D, LOCK_GOLD, 138.0F * pulse);
+	}
+
+	private static void renderSentinelWingmanSocketField(VertexConsumer vertices, Vec3 camera,
+			Player player, Vec3 basePos, float progress, double flowTime) {
+		float pulse = Mth.sin(progress * Mth.PI);
+		if (pulse <= 0.01F) return;
+		double yawRad = Math.toRadians(player.yBodyRot);
+		Vec3 right = new Vec3(-Math.cos(yawRad), 0.0D, -Math.sin(yawRad));
+		Vec3 back = new Vec3(Math.sin(yawRad), 0.0D, -Math.cos(yawRad));
+		Basis backBasis = basis(back);
+		for (int side : new int[] { -1, 1 }) {
+			Vec3 socket = basePos.add(0.0D, 1.24D, 0.0D)
+					.add(right.scale(side * 0.32D))
+					.add(back.scale(0.26D));
+			renderBrokenRing(vertices, camera, socket, back, backBasis,
+					0.28D + 0.24D * pulse, 0.05D, 14, flowTime * 0.45D * side,
+					mix(AIR_CYAN, LOCK_GOLD, 0.45F), 156.0F * pulse);
 		}
 	}
 
@@ -124,30 +298,40 @@ final class CruiseRecallFxRenderer {
 			Vec3 apex, Vec3 direction, double length, double maxRadius,
 			int segments, int sides, double phase, Rgba color, float maxAlpha) {
 		Basis basis = basis(direction);
+		Vec3[] ring0 = new Vec3[sides];
+		Vec3[] ring1 = new Vec3[sides];
+		double[] angles = new double[sides];
+		Vec3[] unitRadials = new Vec3[sides];
+		for (int side = 0; side < sides; side++) {
+			double angle = Math.PI * 2.0D * side / sides;
+			angles[side] = angle;
+			unitRadials[side] = basis.radial(angle);
+			ring0[side] = shellPoint(apex, direction, basis, unitRadials[side],
+					length, maxRadius, 0.0D, angle, phase);
+		}
+		float alpha0 = maxAlpha * mistEnvelope(0.0F);
+		Rgba c0 = color.alpha(alpha0);
 		for (int segment = 0; segment < segments; segment++) {
-			double t0 = segment / (double) segments;
 			double t1 = (segment + 1) / (double) segments;
-			float alpha0 = maxAlpha * mistEnvelope((float) t0);
 			float alpha1 = maxAlpha * mistEnvelope((float) t1);
+			Rgba c1 = color.alpha(alpha1);
 			for (int side = 0; side < sides; side++) {
-				double angle0 = Math.PI * 2.0D * side / sides;
-				double angle1 = Math.PI * 2.0D * (side + 1) / sides;
-				Vec3 v00 = shellPoint(apex, direction, basis, length, maxRadius,
-						t0, angle0, phase);
-				Vec3 v01 = shellPoint(apex, direction, basis, length, maxRadius,
-						t0, angle1, phase);
-				Vec3 v11 = shellPoint(apex, direction, basis, length, maxRadius,
-						t1, angle1, phase);
-				Vec3 v10 = shellPoint(apex, direction, basis, length, maxRadius,
-						t1, angle0, phase);
-				emitQuad(vertices, camera, v00, v01, v11, v10,
-						color.alpha(alpha0), color.alpha(alpha0),
-						color.alpha(alpha1), color.alpha(alpha1));
+				ring1[side] = shellPoint(apex, direction, basis, unitRadials[side],
+						length, maxRadius, t1, angles[side], phase);
 			}
+			for (int side = 0; side < sides; side++) {
+				int next = (side + 1) % sides;
+				emitQuad(vertices, camera, ring0[side], ring0[next], ring1[next], ring1[side],
+						c0, c0, c1, c1);
+			}
+			Vec3[] swap = ring0;
+			ring0 = ring1;
+			ring1 = swap;
+			c0 = c1;
 		}
 	}
 
-	private static Vec3 shellPoint(Vec3 apex, Vec3 direction, Basis basis,
+	private static Vec3 shellPoint(Vec3 apex, Vec3 direction, Basis basis, Vec3 unitRadial,
 			double length, double maxRadius, double t, double angle, double phase) {
 		double axialWave = Math.sin(t * 21.0D - phase * 2.6D + angle * 2.0D);
 		double angularWave = Math.sin(angle * 5.0D + t * 13.0D + phase * 1.7D);
@@ -157,7 +341,7 @@ final class CruiseRecallFxRenderer {
 		Vec3 swirl = basis.radial(swirlAngle)
 				.scale(maxRadius * t * 0.028D * Math.sin(t * 11.0D + phase));
 		return apex.subtract(direction.scale(0.12D + length * t))
-				.add(swirl).add(basis.radial(angle).scale(radius));
+				.add(swirl).add(unitRadial.scale(radius));
 	}
 
 	private static void renderFlowWisps(VertexConsumer vertices, Vec3 camera,
@@ -227,13 +411,14 @@ final class CruiseRecallFxRenderer {
 			float alpha = maxAlpha * (float) Mth.clamp(0.50D + noise * 0.30D, 0.12D, 1.0D);
 			Vec3 radial0 = basis.radial(angle0);
 			Vec3 radial1 = basis.radial(angle1);
+			Rgba c0 = color.alpha(alpha);
+			Rgba c1 = color.alpha(alpha * 0.72F);
 			emitQuad(vertices, camera,
 					center.add(radial0.scale(inner)),
 					center.add(radial0.scale(outer)),
 					center.add(radial1.scale(outer)),
 					center.add(radial1.scale(inner)),
-					color.alpha(alpha), color.alpha(alpha),
-					color.alpha(alpha * 0.72F), color.alpha(alpha * 0.72F));
+					c0, c0, c1, c1);
 		}
 	}
 

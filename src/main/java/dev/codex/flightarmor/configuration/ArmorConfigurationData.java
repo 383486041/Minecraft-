@@ -28,6 +28,7 @@ public final class ArmorConfigurationData {
 	private static final String WINGMEN_TRANSITION_START_KEY = "WingmenTransitionStart";
 	private static final String WINGMEN_START_OWNERSHIP_KEY = "WingmenStartOwnership";
 	private static final int FORMAT_VERSION = 2;
+	private static volatile CachedSnapshot lastRead;
 
 	private ArmorConfigurationData() {
 	}
@@ -36,12 +37,22 @@ public final class ArmorConfigurationData {
 		if (chestStack == null || chestStack.isEmpty()) return Snapshot.DEFAULT;
 		CustomData data = chestStack.get(DataComponents.CUSTOM_DATA);
 		if (data == null) return Snapshot.DEFAULT;
+		CachedSnapshot cached = lastRead;
+		if (cached != null && cached.data == data) {
+			return cached.snapshot;
+		}
 		CompoundTag customRoot = data.copyTag();
-		if (!customRoot.contains(ROOT_KEY, CompoundTag.TAG_COMPOUND)) return Snapshot.DEFAULT;
+		if (!customRoot.contains(ROOT_KEY, CompoundTag.TAG_COMPOUND)) {
+			lastRead = new CachedSnapshot(data, Snapshot.DEFAULT);
+			return Snapshot.DEFAULT;
+		}
 		CompoundTag root = customRoot.getCompound(ROOT_KEY);
 		int version = root.getInt(VERSION_KEY);
-		if (version < 1 || version > FORMAT_VERSION) return Snapshot.DEFAULT;
-		return new Snapshot(
+		if (version < 1 || version > FORMAT_VERSION) {
+			lastRead = new CachedSnapshot(data, Snapshot.DEFAULT);
+			return Snapshot.DEFAULT;
+		}
+		Snapshot parsed = new Snapshot(
 				SentinelArmorMode.fromSerializedName(root.getString(MODE_KEY)),
 				Math.max(0L, root.getLong(REVISION_KEY)),
 				Math.max(0L, root.getLong(TRANSITION_START_KEY)),
@@ -50,6 +61,8 @@ public final class ArmorConfigurationData {
 				version >= 2
 						? Math.max(0L, root.getLong(WINGMEN_TRANSITION_START_KEY)) : 0L,
 				version >= 2 ? clampUnit(root.getFloat(WINGMEN_START_OWNERSHIP_KEY)) : 0.0F);
+		lastRead = new CachedSnapshot(data, parsed);
+		return parsed;
 	}
 
 	public static boolean set(ItemStack chestStack, SentinelArmorMode mode,
@@ -101,7 +114,9 @@ public final class ArmorConfigurationData {
 		root.putFloat(WINGMEN_START_OWNERSHIP_KEY,
 				clampUnit(snapshot.wingmenTransitionStartOwnership()));
 		customRoot.put(ROOT_KEY, root);
-		chestStack.set(DataComponents.CUSTOM_DATA, CustomData.of(customRoot));
+		CustomData updated = CustomData.of(customRoot);
+		chestStack.set(DataComponents.CUSTOM_DATA, updated);
+		lastRead = new CachedSnapshot(updated, snapshot);
 		return true;
 	}
 
@@ -137,5 +152,8 @@ public final class ArmorConfigurationData {
 		private static final Snapshot DEFAULT =
 				new Snapshot(SentinelArmorMode.DEFAULT, 0L, 0L,
 						false, 0L, 0L, 0.0F);
+	}
+
+	private record CachedSnapshot(CustomData data, Snapshot snapshot) {
 	}
 }

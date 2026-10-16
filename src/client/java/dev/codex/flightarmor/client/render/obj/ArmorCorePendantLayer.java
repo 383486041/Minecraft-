@@ -29,11 +29,10 @@ import net.minecraft.world.item.ItemStack;
  * 的裁剪通道，核心本体走自发光通道并随 tick 轻微脉动，用来区分「认主生效」与「未认主」。
  * 顶点写法刻意与 {@code ArmorObjMesh#render} 保持同一套 API，避免与工程既有的渲染约定分叉。</p>
  *
- * <p><b>坐标口径（踩过）</b>：{@code body} 局部空间 1 单位 = 1/16 格，且 {@code y = 0} 是
- * <b>肩</b>、{@code y = 12} 是胯、{@code y = -8} 才是头顶。所以胸口是<b>正值</b>
- * {@code y 2.4~5.0}，与 OBJ 里 {@code core_cradle/housing/reactor} 的区间一致，也正是
- * {@link FlightObjArmorRenderer} 缩放核心所用的枢轴 {@code y = 3.65}。
- * 这里曾按「往上是负、以腰为原点」写成 {@code y -8.6~-4.6}，核心因此被画到了头顶上方。</p>
+ * <p><b>坐标口径（踩过）</b>：{@code body.translateAndRotate} 之后必须执行
+ * {@code poseStack.scale(1/16, 1/16, 1/16)} 才能进入模型像素空间（1 单位 = 1/16 格），
+ * 且 {@code y = 0} 是<b>肩</b>、{@code y = 12} 是胯、{@code y = -8} 才是头顶。所以胸口是<b>正值</b>
+ * {@code y 2.4~5.0}，与 OBJ 里 {@code core_cradle/housing/reactor} 的区间一致。</p>
  */
 public final class ArmorCorePendantLayer
 		extends RenderLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
@@ -68,10 +67,10 @@ public final class ArmorCorePendantLayer
 
 		poseStack.pushPose();
 		getParentModel().body.translateAndRotate(poseStack);
+		poseStack.scale(1.0F / 16.0F, 1.0F / 16.0F, 1.0F / 16.0F);
 
 		// 挂件尺寸随型号走：三个型号的核心槽差得很远（疾影半宽 1.09 / 先锋 1.37 / 守望 1.78），
-		// 固定尺寸在任一型号上不是撑破槽就是塞不满 —— 之前那版把槽外扩了一圈，
-		// 实机观感就是「胸口糊着一块大板」。现在三层同心叠在槽面之前，由大到小各让出一圈。
+		// 固定尺寸在任一型号上不是撑破槽就是塞不满 —— 现在三层同心叠在槽面之前，由大到小各让出一圈。
 		CoreExtent core = coreExtent(chest);
 		float centerY = (core.y0() + core.y1()) * 0.5F;
 		float halfHeight = (core.y1() - core.y0()) * 0.5F;
@@ -116,9 +115,9 @@ public final class ArmorCorePendantLayer
 	 */
 	private static CoreExtent coreExtent(ItemStack chest) {
 		return switch (ArmorVariantData.get(chest)) {
-			case SWIFT -> new CoreExtent(1.09F, 2.38F, 5.02F, -3.01F, -2.68F);
-			case SENTINEL -> new CoreExtent(1.78F, 1.96F, 5.30F, -3.58F, -3.12F);
-			case VANGUARD -> new CoreExtent(1.37F, 2.38F, 5.02F, -3.08F, -2.73F);
+			case SWIFT -> new CoreExtent(1.37F, 2.18F, 5.22F, -3.25F, -2.70F);
+			case SENTINEL -> new CoreExtent(1.84F, 1.96F, 5.30F, -3.68F, -3.10F);
+			case VANGUARD -> new CoreExtent(1.61F, 2.18F, 5.22F, -3.25F, -2.70F);
 		};
 	}
 

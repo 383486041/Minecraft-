@@ -26,6 +26,12 @@ public final class FlightArmorItemPreviewRenderer
 	private static final FlightArmorItemPreviewRenderer INSTANCE =
 			new FlightArmorItemPreviewRenderer();
 	private static final Offset ZERO = new Offset(0.0F, 0.0F, 0.0F);
+	private static final Offset LEFT_ARM_OFFSET = new Offset(5.0F, 2.0F, 0.0F);
+	private static final Offset RIGHT_ARM_OFFSET = new Offset(-5.0F, 2.0F, 0.0F);
+	private static final Offset LEFT_LEG_OFFSET = new Offset(2.05F, 12.0F, 0.0F);
+	private static final Offset RIGHT_LEG_OFFSET = new Offset(-2.05F, 12.0F, 0.0F);
+	private static final Offset LEFT_BOOT_OFFSET = new Offset(2.15F, 12.0F, -0.35F);
+	private static final Offset RIGHT_BOOT_OFFSET = new Offset(-2.15F, 12.0F, 0.35F);
 
 	private FlightArmorItemPreviewRenderer() {}
 
@@ -69,11 +75,10 @@ public final class FlightArmorItemPreviewRenderer
 
 		VertexConsumer emissive = buffers.getBuffer(RenderType.entityTranslucentEmissive(
 				FlightObjArmorRenderer.EMISSIVE_TEXTURE));
-		ArmorObjMesh.Color led = new ArmorObjMesh.Color(
-				variant.lightRed(), variant.lightGreen(), variant.lightBlue(), 255);
 		for (ArmorObjMesh.Group group : mesh.groups()) {
 			if (slotForGroup(group.name()) != slot || !isEmissive(group.name())) continue;
-			renderGroup(mesh, group, poseStack, emissive, LightTexture.FULL_BRIGHT, led, layout);
+			renderGroup(mesh, group, poseStack, emissive, LightTexture.FULL_BRIGHT,
+					emissiveColor(variant, group.name()), layout);
 		}
 		poseStack.popPose();
 	}
@@ -112,8 +117,8 @@ public final class FlightArmorItemPreviewRenderer
 		float contextScale;
 		switch (context) {
 			case GUI -> {
-				poseStack.mulPose(Axis.XP.rotationDegrees(18.0F));
-				poseStack.mulPose(Axis.YP.rotationDegrees(205.0F));
+				poseStack.mulPose(Axis.XP.rotationDegrees(20.0F));
+				poseStack.mulPose(Axis.YP.rotationDegrees(212.0F));
 				contextScale = 1.0F;
 			}
 			case FIXED -> {
@@ -157,10 +162,35 @@ public final class FlightArmorItemPreviewRenderer
 	private static void renderGroup(ArmorObjMesh mesh, ArmorObjMesh.Group group,
 			PoseStack poseStack, VertexConsumer consumer, int packedLight,
 			ArmorObjMesh.Color color, PreviewLayout layout) {
-		Offset anchor = anchorForGroup(group.name());
+		String name = group.name();
+		Offset anchor = anchorForGroup(name);
 		poseStack.pushPose();
 		poseStack.translate(anchor.x() - layout.centerX(), anchor.y() - layout.centerY(),
 				anchor.z() - layout.centerZ());
+		if (name.contains("vane_") && name.contains("_sentinel_")) {
+			// Fold the long Sentinel overdrive wings into a compact, readable V-silhouette
+			// in item previews so they frame the chestplate rather than hanging below the slot.
+			float side = name.contains("_left_") ? 1.0F : -1.0F;
+			poseStack.translate(side * 1.35F, -1.85F, 0.65F);
+			poseStack.translate(side * 3.62F, 2.55F, 2.52F);
+			poseStack.mulPose(Axis.ZP.rotationDegrees(side * -34.0F));
+			poseStack.mulPose(Axis.YP.rotationDegrees(side * -18.0F));
+			poseStack.scale(0.76F, 0.52F, 0.78F);
+			poseStack.translate(-side * 3.62F, -2.55F, -2.52F);
+		} else if (hasAny(name, "left_arm", "arm_left", "right_arm", "arm_right")) {
+			float side = hasAny(name, "left_arm", "arm_left") ? 1.0F : -1.0F;
+			poseStack.translate(side * 0.35F, 0.0F, 0.0F);
+			poseStack.mulPose(Axis.ZP.rotationDegrees(side * -9.0F));
+			poseStack.mulPose(Axis.XP.rotationDegrees(-6.0F));
+		}
+		if (name.contains("underlayer_shadow") || name.contains("_seal_shadow")
+				|| name.equals("head_shell_shadow")) {
+			// Slightly inset inner shadow blocks in item previews so the outer wrap-around
+			// armor plates stand out in crisp relief at 16x16 / 32x32 GUI resolution.
+			poseStack.translate(group.centerX(), group.centerY(), group.centerZ());
+			poseStack.scale(0.95F, 0.96F, 0.95F);
+			poseStack.translate(-group.centerX(), -group.centerY(), -group.centerZ());
+		}
 		mesh.render(group, poseStack.last(), consumer, packedLight, color);
 		poseStack.popPose();
 	}
@@ -197,13 +227,19 @@ public final class FlightArmorItemPreviewRenderer
 
 	private static Offset anchorForGroup(String rawName) {
 		String name = rawName.toLowerCase(Locale.ROOT);
-		if (hasAny(name, "left_arm", "arm_left")) return new Offset(5.0F, 2.0F, 0.0F);
-		if (hasAny(name, "right_arm", "arm_right")) return new Offset(-5.0F, 2.0F, 0.0F);
-		if (hasAny(name, "left_leg", "leg_left", "left_boot", "boot_left")) {
-			return new Offset(1.9F, 12.0F, 0.0F);
+		if (hasAny(name, "left_boot", "boot_left", "left_ankle", "ankle_left")) {
+			return LEFT_BOOT_OFFSET;
 		}
-		if (hasAny(name, "right_leg", "leg_right", "right_boot", "boot_right")) {
-			return new Offset(-1.9F, 12.0F, 0.0F);
+		if (hasAny(name, "right_boot", "boot_right", "right_ankle", "ankle_right")) {
+			return RIGHT_BOOT_OFFSET;
+		}
+		if (hasAny(name, "left_arm", "arm_left")) return LEFT_ARM_OFFSET;
+		if (hasAny(name, "right_arm", "arm_right")) return RIGHT_ARM_OFFSET;
+		if (hasAny(name, "left_leg", "leg_left")) {
+			return LEFT_LEG_OFFSET;
+		}
+		if (hasAny(name, "right_leg", "leg_right")) {
+			return RIGHT_LEG_OFFSET;
 		}
 		return ZERO;
 	}
@@ -214,28 +250,40 @@ public final class FlightArmorItemPreviewRenderer
 	}
 
 	private static ArmorObjMesh.Color baseColor(ArmorVariant variant, String name) {
-		boolean visor = name.contains("visor") || name.contains("glass");
-		boolean dark = hasAny(name, "shadow", "under", "black", "dark", "gunmetal", "frame", "joint");
+		return FlightObjArmorRenderer.previewBaseColor(variant, name);
+	}
+
+	private static ArmorObjMesh.Color emissiveColor(ArmorVariant variant, String name) {
+		if (name.contains("chin_chevron") || name.contains("command_node_led")) {
+			return variant == ArmorVariant.SWIFT
+					? new ArmorObjMesh.Color(196, 38, 112, 255)
+					: variant == ArmorVariant.SENTINEL
+					? new ArmorObjMesh.Color(178, 42, 44, 255)
+					: new ArmorObjMesh.Color(212, 46, 52, 255);
+		}
+		if (name.contains("faceplate_v_edge")) {
+			return new ArmorObjMesh.Color(24, 28, 36, 255);
+		}
 		if (variant == ArmorVariant.SWIFT) {
-			return visor ? new ArmorObjMesh.Color(78, 36, 108, 255)
-					: dark ? new ArmorObjMesh.Color(34, 25, 52, 255)
-					: new ArmorObjMesh.Color(144, 112, 184, 255);
+			if (name.contains("core_reactor") || name.contains("visor") || name.contains("blade")) {
+				return new ArmorObjMesh.Color(255, 118, 250, 255);
+			}
+			return new ArmorObjMesh.Color(214, 72, 255, 255);
 		}
 		if (variant == ArmorVariant.SENTINEL) {
-			return visor ? new ArmorObjMesh.Color(105, 61, 22, 255)
-					: dark ? new ArmorObjMesh.Color(65, 44, 23, 255)
-					: new ArmorObjMesh.Color(216, 169, 72, 255);
+			if (name.contains("core_reactor") || name.contains("visor") || name.contains("muzzle")) {
+				return new ArmorObjMesh.Color(255, 232, 138, 255);
+			}
+			if (name.contains("spine_sentinel") || name.contains("drone_pod_status")) {
+				return new ArmorObjMesh.Color(64, 238, 255, 255);
+			}
+			return new ArmorObjMesh.Color(255, 184, 46, 255);
 		}
-		if (visor) return new ArmorObjMesh.Color(42, 73, 88, 255);
-		if (dark) return name.contains("shadow") || name.contains("under")
-				? new ArmorObjMesh.Color(24, 32, 38, 255)
-				: new ArmorObjMesh.Color(55, 70, 79, 255);
-		if (name.contains("accent") || name.contains("trim")) {
-			return new ArmorObjMesh.Color(92, 115, 126, 255);
+		if (name.contains("core_reactor") || name.contains("visor")) {
+			return new ArmorObjMesh.Color(148, 248, 255, 255);
 		}
-		return name.contains("light") || name.contains("silver")
-				? new ArmorObjMesh.Color(198, 211, 216, 255)
-				: new ArmorObjMesh.Color(166, 182, 190, 255);
+		return new ArmorObjMesh.Color(
+				variant.lightRed(), variant.lightGreen(), variant.lightBlue(), 255);
 	}
 
 	private static boolean hasAny(String value, String... fragments) {
@@ -251,10 +299,10 @@ public final class FlightArmorItemPreviewRenderer
 
 		private static PreviewLayout forSlot(EquipmentSlot slot) {
 			return switch (slot) {
-				case HEAD -> new PreviewLayout(0.0F, -4.35F, 0.0F, 0.070F);
-				case CHEST -> new PreviewLayout(0.0F, 6.83F, 0.0F, 0.045F);
-				case LEGS -> new PreviewLayout(0.0F, 15.40F, 0.0F, 0.078F);
-				case FEET -> new PreviewLayout(0.0F, 21.41F, 0.0F, 0.080F);
+				case HEAD -> new PreviewLayout(0.0F, -4.95F, -0.15F, 0.068F);
+				case CHEST -> new PreviewLayout(0.0F, 5.85F, 0.10F, 0.048F);
+				case LEGS -> new PreviewLayout(0.0F, 15.15F, 0.0F, 0.080F);
+				case FEET -> new PreviewLayout(0.0F, 21.35F, 0.0F, 0.084F);
 				default -> throw new IllegalArgumentException("Unsupported armor preview slot: " + slot);
 			};
 		}

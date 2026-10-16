@@ -2,6 +2,8 @@ package dev.codex.flightarmor.client.render.obj;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import dev.codex.flightarmor.client.assembly.ArmorAssemblyPart;
+import dev.codex.flightarmor.configuration.SentinelVisualZone;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 
 import java.io.BufferedReader;
@@ -21,14 +23,26 @@ import java.util.Map;
  * {@code ModelPart.translateAndRotate}，再统一缩放为 1/16 方块。解析器支持
  * {@code o/g/v/vn/f}、负索引、三角面、四边形和多边形；没有 {@code vn}
  * 时会根据顶点顺序计算平面法线。</p>
+ *
+ * <p>解析阶段会一次性预计算每个分组的平坦化顶点缓冲（{@code float[]}）与分类特征位，
+ * 避免在每帧渲染循环中重复执行字符串拆解与多层集合迭代器开销。</p>
  */
 final class ArmorObjMesh {
+	static final int TONE_PRIMARY = 0;
+	static final int TONE_HIGHLIGHT = 1;
+	static final int TONE_ACCENT = 2;
+	static final int TONE_GUNMETAL = 3;
+	static final int TONE_SHADOW = 4;
+	static final int TONE_VISOR = 5;
+
 	private static final ArmorObjMesh EMPTY = new ArmorObjMesh(List.of());
 
 	private final List<Group> groups;
+	private final int totalFaceCount;
 
 	private ArmorObjMesh(List<Group> groups) {
 		this.groups = groups;
+		this.totalFaceCount = groups.stream().mapToInt( group -> group.faces().size()).sum();
 	}
 
 	static ArmorObjMesh empty() {
@@ -98,19 +112,22 @@ final class ArmorObjMesh {
 	}
 
 	int faceCount() {
-		return groups.stream().mapToInt(group -> group.faces().size()).sum();
+		return totalFaceCount;
 	}
 
 	void render(Group group, PoseStack.Pose pose, VertexConsumer consumer, int packedLight, Color color) {
-		for (Face face : group.faces()) {
-			for (Vertex vertex : face.vertices()) {
-				consumer.addVertex(pose, vertex.x(), vertex.y(), vertex.z())
-						.setColor(color.red(), color.green(), color.blue(), color.alpha())
-						.setUv(0.5F, 0.5F)
-						.setOverlay(OverlayTexture.NO_OVERLAY)
-						.setLight(packedLight)
-						.setNormal(pose, vertex.nx(), vertex.ny(), vertex.nz());
-			}
+		float[] packed = group.packedVertices();
+		int red = color.red();
+		int green = color.green();
+		int blue = color.blue();
+		int alpha = color.alpha();
+		for (int offset = 0, limit = packed.length; offset < limit; offset += 6) {
+			consumer.addVertex(pose, packed[offset], packed[offset + 1], packed[offset + 2])
+					.setColor(red, green, blue, alpha)
+					.setUv(0.5F, 0.5F)
+					.setOverlay(OverlayTexture.NO_OVERLAY)
+					.setLight(packedLight)
+					.setNormal(pose, packed[offset + 3], packed[offset + 4], packed[offset + 5]);
 		}
 	}
 
@@ -159,7 +176,72 @@ final class ArmorObjMesh {
 		return resolved;
 	}
 
-	record Group(String name, List<Face> faces, float centerX, float centerY, float centerZ) {
+	private static boolean computeIsLed(String name) {
+		return name.endsWith("_led") || name.contains("_led_") || name.startsWith("led_")
+				|| name.contains("emissive") || name.contains("_glow") || name.startsWith("glow_");
+	}
+
+	private static int computeToneCategory(String name) {
+		if (name.contains("visor") || name.contains("glass")) {
+			return TONE_VISOR;
+		}
+		if (name.contains("shadow") || name.contains("under") || name.contains("black")) {
+			return TONE_SHADOW;
+		}
+		if (name.contains("dark") || name.contains("gunmetal") || name.contains("frame")
+				|| name.contains("joint") || name.contains("barrel") || name.contains("shutter")
+				|| name.contains("wrist_lock") || name.contains("rail")) {
+			return TONE_GUNMETAL;
+		}
+		if (name.contains("accent") || name.contains("trim") || name.contains("flank")
+				|| name.contains("apron") || name.contains("fin_") || name.contains("_fin")
+				|| name.contains("cowl") || name.contains("pelvis") || name.contains("cuff")
+				|| name.contains("collar") || name.contains("housing")) {
+			return TONE_ACCENT;
+		}
+		if (name.contains("light") || name.contains("silver") || name.contains("crest")
+				|| name.contains("brow") || name.contains("spine") || name.contains("sternum")
+				|| name.contains("knee") || name.contains("toe") || name.contains("cover_outer")
+				|| name.contains("hand_shell_outer") || name.contains("wing_tip")) {
+			return TONE_HIGHLIGHT;
+		}
+		return TONE_PRIMARY;
+	}
+
+	private static boolean computeIsCoaxialShell(String name) {
+		return name.contains("underlayer") || name.contains("_seal_")
+				|| name.contains("head_shell_shadow") || name.contains("head_dome_cowl")
+				|| name.contains("_shell_titanium") || name.contains("waist")
+				|| name.contains("pelvis") || name.contains("cuff")
+				|| name.contains("ankle_frame") || name.contains("gravity_ring")
+				|| name.contains("boot_ring") || name.contains("ankle_ring")
+				|| name.contains("sole_pad") || name.contains("sole_field");
+	}
+
+	private static boolean computeIsRearGroup(String name, float centerZ) {
+		if (name.contains("rear") || name.contains("backplate") || name.contains("spine")
+				|| name.contains("heel") || name.contains("vane_") || name.contains("flight_fin")
+				|| name.contains("cover_outer") || name.contains("cover_inner")
+				|| name.contains("hand_shell") || name.contains("wrist_lock")
+				|| name.contains("emitter_shutter") || name.contains("emitter_track")) {
+			return true;
+		}
+		return centerZ > 1.25F;
+	}
+
+	record Group(
+			String name,
+			List<Face> faces,
+			float centerX,
+			float centerY,
+			float centerZ,
+			float[] packedVertices,
+			boolean led,
+			int toneCategory,
+			boolean coaxialShell,
+			boolean rearGroup,
+			SentinelVisualZone sentinelZone,
+			ArmorAssemblyPart classifiedAssemblyPart) {
 		Group {
 			faces = List.copyOf(faces);
 		}
@@ -264,12 +346,38 @@ final class ArmorObjMesh {
 
 		private Group build() {
 			if (faces.isEmpty()) {
-				return new Group(name, Collections.emptyList(), 0.0F, 0.0F, 0.0F);
+				return new Group(name, Collections.emptyList(), 0.0F, 0.0F, 0.0F,
+						new float[0], false, TONE_PRIMARY, false, false,
+						SentinelVisualZone.NONE, null);
 			}
-			return new Group(name, faces,
-					(minX + maxX) * 0.5F,
-					(minY + maxY) * 0.5F,
-					(minZ + maxZ) * 0.5F);
+			float centerX = (minX + maxX) * 0.5F;
+			float centerY = (minY + maxY) * 0.5F;
+			float centerZ = (minZ + maxZ) * 0.5F;
+			float[] packed = new float[faces.size() * 24];
+			int cursor = 0;
+			for (Face face : faces) {
+				for (Vertex vertex : face.vertices()) {
+					packed[cursor++] = vertex.x();
+					packed[cursor++] = vertex.y();
+					packed[cursor++] = vertex.z();
+					packed[cursor++] = vertex.nx();
+					packed[cursor++] = vertex.ny();
+					packed[cursor++] = vertex.nz();
+				}
+			}
+			return new Group(
+					name,
+					faces,
+					centerX,
+					centerY,
+					centerZ,
+					packed,
+					computeIsLed(name),
+					computeToneCategory(name),
+					computeIsCoaxialShell(name),
+					computeIsRearGroup(name, centerZ),
+					SentinelVisualZone.fromGroup(name),
+					ArmorAssemblyPart.fromGroupName(name));
 		}
 	}
 }
