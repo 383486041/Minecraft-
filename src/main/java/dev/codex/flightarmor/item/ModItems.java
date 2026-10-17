@@ -6,6 +6,8 @@ import dev.codex.flightarmor.variant.ArmorVariantData;
 import net.fabricmc.fabric.api.creativetab.v1.CreativeModeTabEvents;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.CreativeModeTabs;
@@ -16,12 +18,18 @@ import net.minecraft.world.item.equipment.ArmorType;
 import java.util.Optional;
 
 public final class ModItems {
-	public static final FlightArmorItem FLIGHT_HELMET = register("flight_helmet", new FlightArmorItem(ArmorType.HELMET));
-	public static final FlightArmorItem FLIGHT_CHESTPLATE = register("flight_chestplate", new FlightArmorItem(ArmorType.CHESTPLATE));
-	public static final FlightArmorItem FLIGHT_LEGGINGS = register("flight_leggings", new FlightArmorItem(ArmorType.LEGGINGS));
-	public static final FlightArmorItem FLIGHT_BOOTS = register("flight_boots", new FlightArmorItem(ArmorType.BOOTS));
-	public static final ArmorNavigationCoreItem ARMOR_NAVIGATION_CORE = register("armor_navigation_core",
-			new ArmorNavigationCoreItem(new Item.Properties().stacksTo(1)));
+	public static final ResourceKey<Item> FLIGHT_HELMET_KEY = itemKey("flight_helmet");
+	public static final ResourceKey<Item> FLIGHT_CHESTPLATE_KEY = itemKey("flight_chestplate");
+	public static final ResourceKey<Item> FLIGHT_LEGGINGS_KEY = itemKey("flight_leggings");
+	public static final ResourceKey<Item> FLIGHT_BOOTS_KEY = itemKey("flight_boots");
+	public static final ResourceKey<Item> ARMOR_NAVIGATION_CORE_KEY = itemKey("armor_navigation_core");
+
+	public static final FlightArmorItem FLIGHT_HELMET = register(FLIGHT_HELMET_KEY, new FlightArmorItem(FLIGHT_HELMET_KEY, ArmorType.HELMET));
+	public static final FlightArmorItem FLIGHT_CHESTPLATE = register(FLIGHT_CHESTPLATE_KEY, new FlightArmorItem(FLIGHT_CHESTPLATE_KEY, ArmorType.CHESTPLATE));
+	public static final FlightArmorItem FLIGHT_LEGGINGS = register(FLIGHT_LEGGINGS_KEY, new FlightArmorItem(FLIGHT_LEGGINGS_KEY, ArmorType.LEGGINGS));
+	public static final FlightArmorItem FLIGHT_BOOTS = register(FLIGHT_BOOTS_KEY, new FlightArmorItem(FLIGHT_BOOTS_KEY, ArmorType.BOOTS));
+	public static final ArmorNavigationCoreItem ARMOR_NAVIGATION_CORE = register(ARMOR_NAVIGATION_CORE_KEY,
+			new ArmorNavigationCoreItem(new Item.Properties().setId(ARMOR_NAVIGATION_CORE_KEY).stacksTo(1)));
 
 	private ModItems() {
 	}
@@ -92,7 +100,15 @@ public final class ModItems {
 		return hasFullSet(entity) || entity.getItemBySlot(EquipmentSlot.FEET).is(FLIGHT_BOOTS);
 	}
 
+	public static ResourceKey<Item> itemKey(String path) {
+		return ResourceKey.create(Registries.ITEM, FlightArmorMod.id(path));
+	}
+
+	private static <T extends Item> T register(ResourceKey<Item> key, T item) {
+		return Registry.register(BuiltInRegistries.ITEM, key, item);
+	}
+
 	private static <T extends Item> T register(String path, T item) {
-		return Registry.register(BuiltInRegistries.ITEM, FlightArmorMod.id(path), item);
+		return Registry.register(BuiltInRegistries.ITEM, itemKey(path), item);
 	}
 }

@@ -1,9 +1,12 @@
 package dev.codex.flightarmor.item;
 
+import dev.codex.flightarmor.FlightArmorMod;
 import dev.codex.flightarmor.variant.ArmorVariant;
 import dev.codex.flightarmor.variant.ArmorVariantData;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
@@ -15,9 +18,19 @@ import java.util.function.Consumer;
 public final class FlightArmorItem extends Item {
 	private final ArmorType armorType;
 
-	public FlightArmorItem(ArmorType type) {
-		super(new Item.Properties().humanoidArmor(ModArmorMaterials.FLIGHT, type).fireResistant());
+	public FlightArmorItem(ResourceKey<Item> key, ArmorType type) {
+		super(new Item.Properties().setId(key).humanoidArmor(ModArmorMaterials.FLIGHT, type).fireResistant());
 		this.armorType = type;
+	}
+
+	public FlightArmorItem(ArmorType type) {
+		this(ResourceKey.create(Registries.ITEM, FlightArmorMod.id(switch (type) {
+			case HELMET -> "flight_helmet";
+			case CHESTPLATE -> "flight_chestplate";
+			case LEGGINGS -> "flight_leggings";
+			case BOOTS -> "flight_boots";
+			default -> throw new IllegalArgumentException("Unknown armor type: " + type);
+		})), type);
 	}
 
 	public ArmorType getArmorType() {

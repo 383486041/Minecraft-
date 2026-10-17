@@ -4,6 +4,9 @@ import dev.codex.flightarmor.FlightArmorMod;
 import net.fabricmc.fabric.api.creativetab.v1.CreativeModeTabEvents;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
@@ -17,8 +20,14 @@ import net.minecraft.world.flag.FeatureFlags;
 
 /** 充能平台的集中注册点；主入口只需调用一次 {@link #initialize()}。 */
 public final class ModPlatformContent {
+	public static final ResourceKey<Block> CHARGING_PLATFORM_BLOCK_KEY =
+			ResourceKey.create(Registries.BLOCK, FlightArmorMod.id("charging_platform"));
+	public static final ResourceKey<Item> CHARGING_PLATFORM_ITEM_KEY =
+			ResourceKey.create(Registries.ITEM, FlightArmorMod.id("charging_platform"));
+
 	public static final ChargingPlatformBlock CHARGING_PLATFORM = new ChargingPlatformBlock(
 			BlockBehaviour.Properties.of()
+					.setId(CHARGING_PLATFORM_BLOCK_KEY)
 					.mapColor(MapColor.METAL)
 					.strength(4.5F, 12.0F)
 					.sound(SoundType.METAL)
@@ -27,7 +36,7 @@ public final class ModPlatformContent {
 					.lightLevel(state -> 8)
 					.pushReaction(PushReaction.IMMOVEABLE));
 	public static final BlockItem CHARGING_PLATFORM_ITEM = new BlockItem(
-			CHARGING_PLATFORM, new Item.Properties().fireResistant());
+			CHARGING_PLATFORM, new Item.Properties().setId(CHARGING_PLATFORM_ITEM_KEY).useBlockDescriptionPrefix().fireResistant());
 	public static final BlockEntityType<ChargingPlatformBlockEntity> CHARGING_PLATFORM_BLOCK_ENTITY =
 			new BlockEntityType<>(ChargingPlatformBlockEntity::new, java.util.Set.of(CHARGING_PLATFORM));
 	public static final MenuType<ChargingPlatformMenu> CHARGING_PLATFORM_MENU =
@@ -40,8 +49,8 @@ public final class ModPlatformContent {
 
 	public static synchronized void initialize() {
 		if (initialized) return;
-		Registry.register(BuiltInRegistries.BLOCK, FlightArmorMod.id("charging_platform"), CHARGING_PLATFORM);
-		Registry.register(BuiltInRegistries.ITEM, FlightArmorMod.id("charging_platform"), CHARGING_PLATFORM_ITEM);
+		Registry.register(BuiltInRegistries.BLOCK, CHARGING_PLATFORM_BLOCK_KEY, CHARGING_PLATFORM);
+		Registry.register(BuiltInRegistries.ITEM, CHARGING_PLATFORM_ITEM_KEY, CHARGING_PLATFORM_ITEM);
 		Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE, FlightArmorMod.id("charging_platform"),
 				CHARGING_PLATFORM_BLOCK_ENTITY);
 		Registry.register(BuiltInRegistries.MENU, FlightArmorMod.id("charging_platform"),

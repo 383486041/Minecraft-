@@ -4,6 +4,8 @@ import dev.codex.flightarmor.FlightArmorMod;
 import dev.codex.flightarmor.variant.ArmorVariant;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.LightBlock;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -38,12 +40,14 @@ public final class ModIlluminationContent {
 	public static synchronized void initialize() {
 		if (initialized) return;
 		for (ArmorVariant variant : ArmorVariant.values()) {
+			ResourceKey<Block> blockKey = ResourceKey.create(Registries.BLOCK, FlightArmorMod.id(blockId(variant)));
 			Block block = new LightBlock(BlockBehaviour.Properties.of()
+					.setId(blockKey)
 					.replaceable()
 					.strength(-1.0F, 3600000.0F)
 					.lightLevel(state -> state.getValue(LightBlock.LEVEL))
 					.noLootTable());
-			Registry.register(BuiltInRegistries.BLOCK, FlightArmorMod.id(blockId(variant)), block);
+			Registry.register(BuiltInRegistries.BLOCK, blockKey, block);
 			AURA_LIGHTS.put(variant, block);
 		}
 		initialized = true;
