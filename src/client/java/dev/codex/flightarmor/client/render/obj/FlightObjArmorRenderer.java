@@ -769,7 +769,7 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 		poseStack.pushPose();
 		part.translateAndRotate(poseStack);
 		poseStack.scale(1.0F / 16.0F, 1.0F / 16.0F, 1.0F / 16.0F);
-		applyJointTransform(poseStack, binding, flightPose, entity);
+		applyJointTransform(poseStack, group, binding, flightPose, entity);
 		applyDockingExoskeletonTransform(poseStack, group, binding, dockingProgress);
 		applyAssemblyTransform(poseStack, group, assemblyPart, assemblyPartProgress, assembling);
 		applyDynamicTransform(poseStack, group, variant, entity,
@@ -998,8 +998,8 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 		};
 	}
 
-	private static void applyJointTransform(PoseStack poseStack, GroupBinding binding,
-			FlightPoseFrame pose, LivingEntity entity) {
+	private static void applyJointTransform(PoseStack poseStack, ArmorObjMesh.Group group,
+			GroupBinding binding, FlightPoseFrame pose, LivingEntity entity) {
 		CruiseCombatStage combatStage = CruiseCombatClient.stageOfCarrier(entity);
 		if (combatStage.isRam() || combatStage.isGroundSlam()
 				|| combatStage == CruiseCombatStage.VANGUARD_WRIST) {
@@ -1028,6 +1028,57 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 			poseStack.translate(0.0F, 6.0F, 0.0F);
 			poseStack.mulPose(Axis.XP.rotation(bend * 0.5F));
 			poseStack.translate(0.0F, -6.0F, 0.0F);
+		}
+
+		// RG 高达多连杆外甲随动机构（Multi-Link Limb-Driven Armor Follow-Through）
+		String name = group.name();
+		if (binding.anchor() == Anchor.BODY
+				&& (name.equals("body_waist_titanium")
+						|| name.equals("body_sentinel_waist_apron_titanium")
+						|| name.contains("waist_buckle"))) {
+			float maxThighLift = Math.max(0.0F,
+					-Math.min(pose.leftLegPitch(), pose.rightLegPitch())) / (65.0F * Mth.DEG_TO_RAD);
+			float skirtLift = Mth.clamp(maxThighLift, 0.0F, 1.0F);
+			if (skirtLift > 0.01F) {
+				poseStack.translate(0.0F, -0.22F * skirtLift, -0.28F * skirtLift);
+				rotateAroundPoint(poseStack, 0.0F, 9.05F, -2.85F, -18.0F * skirtLift, 0.0F, 0.0F);
+			}
+		} else if ((binding.anchor() == Anchor.LEFT_ARM || binding.anchor() == Anchor.RIGHT_ARM)
+				&& (name.contains("upper_pauldron") || name.contains("upper_bastion")
+						|| name.contains("upper_tower"))) {
+			boolean left = binding.anchor() == Anchor.LEFT_ARM;
+			float direction = left ? 1.0F : -1.0F;
+			float armPitch = left ? pose.leftArmPitch() : pose.rightArmPitch();
+			float armRoll = Math.abs(left ? pose.leftArmRoll() : pose.rightArmRoll());
+			float liftRatio = Mth.clamp(
+					Math.max(0.0F, -armPitch) / (110.0F * Mth.DEG_TO_RAD)
+							+ armRoll / (90.0F * Mth.DEG_TO_RAD) * 0.45F,
+					0.0F, 1.0F);
+			if (liftRatio > 0.01F) {
+				poseStack.translate(direction * 0.36F * liftRatio, -0.34F * liftRatio, 0.08F * liftRatio);
+				rotateAround(poseStack, group, -4.5F * liftRatio,
+						direction * 5.0F * liftRatio, direction * -14.0F * liftRatio);
+			}
+		} else if (binding.anchor() == Anchor.LEFT_LEG || binding.anchor() == Anchor.RIGHT_LEG) {
+			boolean left = binding.anchor() == Anchor.LEFT_LEG;
+			float kneeRatio = Mth.clamp(
+					Math.max(0.0F, left ? pose.leftKneeBend() : pose.rightKneeBend())
+							/ (75.0F * Mth.DEG_TO_RAD),
+					0.0F, 1.0F);
+			if (kneeRatio > 0.01F) {
+				if (name.contains("thigh_plate") || name.contains("thigh_bastion")) {
+					// 屈膝时大腿前甲沿股骨向上滑移裂甲，露出内部精神感应骨架
+					poseStack.translate(0.0F, -0.38F * kneeRatio, -0.18F * kneeRatio);
+				} else if (name.contains("thigh_knee") || name.contains("knee_lock")) {
+					// 3D 护膝块与黄色喷口在屈膝时向前独立顶出护住膝关节
+					poseStack.translate(0.0F, -0.24F * kneeRatio, -0.32F * kneeRatio);
+					rotateAround(poseStack, group, -9.5F * kneeRatio, 0.0F, 0.0F);
+				} else if (name.contains("calf_crest")) {
+					// 白色脚踝护裙随屈膝自然前倾缓冲
+					poseStack.translate(0.0F, -0.14F * kneeRatio, -0.18F * kneeRatio);
+					rotateAround(poseStack, group, -8.0F * kneeRatio, 0.0F, 0.0F);
+				}
+			}
 		}
 	}
 
@@ -1177,42 +1228,42 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 			}
 
 			float wingStage = late;
-			float hoverBreath = (1.0F - speedProgress) * Mth.sin(animationTime * 0.16F) * 0.18F;
+			float hoverBreath = (1.0F - speedProgress) * Mth.sin(animationTime * 0.16F) * 0.14F;
 			float hoverX = switch (variant) {
-				case VANGUARD -> 3.15F;
-				case SWIFT -> 4.10F;
-				case SENTINEL -> 3.15F;
+				case VANGUARD -> 0.88F;
+				case SWIFT -> 1.18F;
+				case SENTINEL -> 0.88F;
 			};
 			float diveX = switch (variant) {
-				case VANGUARD -> 1.05F;
-				case SWIFT -> 1.52F;
-				case SENTINEL -> 1.05F;
+				case VANGUARD -> 0.32F;
+				case SWIFT -> 0.48F;
+				case SENTINEL -> 0.32F;
 			};
 			float travelX = Mth.lerp(wingLoad, hoverX + hoverBreath, diveX);
 			float travelY = Mth.lerp(wingLoad,
-					-0.78F,
-					variant == ArmorVariant.SWIFT ? 1.08F : 0.82F);
+					-0.52F - 0.18F * speedProgress,
+					variant == ArmorVariant.SWIFT ? 0.64F : 0.48F);
 			float travelZ = Mth.lerp(wingLoad,
-					variant == ArmorVariant.SWIFT ? 1.56F : 1.24F,
-					1.72F);
+					variant == ArmorVariant.SWIFT ? 0.68F : 0.54F,
+					0.96F);
 			poseStack.translate(
 					direction * travelX * wingStage,
 					travelY * wingStage,
 					travelZ * wingStage);
-			rotateAroundPoint(poseStack, direction * 3.62F, 2.55F, 2.52F,
-					Mth.lerp(wingLoad, -10.0F,
-							variant == ArmorVariant.SWIFT ? -24.0F : -18.0F) * wingStage,
+			rotateAroundPoint(poseStack, direction * 3.25F, 1.85F, 3.65F,
+					Mth.lerp(wingLoad, -7.5F - 6.0F * speedProgress,
+							variant == ArmorVariant.SWIFT ? -18.0F : -14.0F) * wingStage,
 					direction * Mth.lerp(wingLoad,
-							variant == ArmorVariant.SWIFT ? -44.0F : -34.0F,
-							-12.0F) * wingStage,
+							variant == ArmorVariant.SWIFT ? -18.0F : -14.0F,
+							-6.0F) * wingStage,
 					direction * Mth.lerp(wingLoad,
-							-26.0F,
-							variant == ArmorVariant.SWIFT ? -4.0F : -6.0F) * wingStage);
+							-14.0F - 6.0F * speedProgress,
+							variant == ArmorVariant.SWIFT ? -4.0F : -5.0F) * wingStage);
 			if (name.contains("spine")) {
-				poseStack.translate(direction * 0.22F * late, 0.0F, 0.16F * late);
+				poseStack.translate(direction * 0.16F * late, 0.0F, 0.12F * late);
 			} else if (name.contains("field") || name.contains("trace_led")) {
-				poseStack.translate(direction * 0.42F * late, 0.0F, 0.26F * late);
-				scaleAround(poseStack, group, 1.0F, 1.0F + (0.16F + 0.20F * speedProgress) * late, 1.0F);
+				poseStack.translate(direction * 0.28F * late, -0.12F * late, 0.18F * late);
+				scaleAround(poseStack, group, 1.0F, 1.0F + (0.12F + 0.16F * speedProgress) * late, 1.0F);
 			}
 		}
 
@@ -1268,6 +1319,15 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 				case SENTINEL -> 0.05F + 0.08F * speedProgress;
 			}) * deployed;
 			scaleAround(poseStack, group, ringScale, 1.0F, ringScale);
+		}
+
+		if (name.contains("swift_center_keel") || name.contains("swift_keel_trace")) {
+			poseStack.translate(0.0F, -0.08F * middle, (0.32F + 0.24F * speedProgress) * middle);
+		}
+
+		if (name.contains("toe_light_titanium") || name.contains("toe_ram")) {
+			poseStack.translate(0.0F, 0.12F * middle, 0.14F * middle);
+			rotateAround(poseStack, group, (14.0F + 8.0F * speedProgress) * middle, 0.0F, 0.0F);
 		}
 
 		if (name.contains("sole_field")) {
@@ -1600,6 +1660,27 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 		float partialTick = Mth.clamp(animationTime - player.tickCount, 0.0F, 1.0F);
 		String name = group.name();
 		applyBladeDeploymentTransform(poseStack, group, player, partialTick);
+
+		// 1. 腕炮射击液压复进后坐与肩甲排热微动（Wrist Pulse Hydraulic Recoil Blowback）
+		float leftRecoil = ArmorCombatClient.leftRecoil(player, partialTick);
+		float rightRecoil = ArmorCombatClient.rightRecoil(player, partialTick);
+		boolean isLeftArmGroup = name.startsWith("arm_left_");
+		boolean isRightArmGroup = name.startsWith("arm_right_");
+		float armRecoil = isLeftArmGroup ? leftRecoil : isRightArmGroup ? rightRecoil : 0.0F;
+		if (armRecoil > 0.001F) {
+			float side = isLeftArmGroup ? 1.0F : -1.0F;
+			if (name.contains("forearm_outer_flank") || name.contains("forearm_outer_shield")
+					|| name.contains("forearm_cuff") || name.contains("forearm_outer_rail")) {
+				// 腕炮开火瞬间前臂护盾与炮口环沿前臂轴向后复进滑移
+				poseStack.translate(side * 0.16F * armRecoil, -0.58F * armRecoil, 0.14F * armRecoil);
+			} else if (name.contains("upper_pauldron") || name.contains("upper_bastion")
+					|| name.contains("pauldron_crest") || name.contains("upper_tower")) {
+				poseStack.translate(side * 0.24F * armRecoil, -0.28F * armRecoil, 0.0F);
+				rotateAround(poseStack, group, -4.0F * armRecoil, 0.0F, side * -8.5F * armRecoil);
+			}
+		}
+
+		// 2. 胸炮 Hi-MAT Full Burst 裂甲、百叶窗开启与背部翼阵全开联动
 		if ((ArmorCombatClient.attackType(player) == dev.codex.flightarmor.combat.ArmorAttackType.CORE_BEAM
 				|| ArmorCombatClient.attackType(player) == dev.codex.flightarmor.combat.ArmorAttackType.CRUISE_CORE_BEAM)) {
 			float phaseProgress = ArmorCombatClient.phaseProgress(player, partialTick);
@@ -1611,24 +1692,81 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 				case IDLE -> release;
 			};
 			strength = Mth.clamp(Math.max(strength, release), 0.0F, 1.0F);
+			float highFreq = Mth.sin(animationTime * 0.85F) * strength;
 			if (name.contains("core_reactor")) {
-				float breath = 0.006F * Mth.sin(animationTime * 0.72F) * strength;
+				float breath = 0.008F * highFreq;
+				poseStack.translate(0.0F, 0.0F, -0.18F * strength);
 				scaleAroundPoint(poseStack, group.centerX(), group.centerY(), group.centerZ(),
-						1.0F + 0.050F * strength + breath,
-						1.0F + 0.050F * strength + breath, 1.0F);
+						1.0F + 0.065F * strength + breath,
+						1.0F + 0.065F * strength + breath, 1.0F);
 			} else if (name.contains("core_housing")) {
+				poseStack.translate(0.0F, 0.0F, -0.12F * strength);
 				scaleAroundPoint(poseStack, group.centerX(), group.centerY(), group.centerZ(),
-						1.0F + 0.015F * strength, 1.0F + 0.015F * strength, 1.0F);
+						1.0F + 0.025F * strength, 1.0F + 0.025F * strength, 1.0F);
+			} else if (name.contains("body_chest_upper") || name.contains("chest_crown")) {
+				poseStack.translate(0.0F, -0.22F * strength, -0.28F * strength);
+				rotateAround(poseStack, group, -16.0F * strength + 2.5F * highFreq, 0.0F, 0.0F);
+			} else if (name.equals("body_chest_titanium") || name.equals("body_sentinel_chest_bastion_titanium")) {
+				poseStack.translate(0.0F, -0.14F * strength, -0.24F * strength);
+				scaleAroundPoint(poseStack, 0.0F, 2.6F, -2.8F,
+						1.0F + 0.06F * strength, 1.0F + 0.03F * strength, 1.0F);
+			} else if (name.startsWith("vane_")) {
+				boolean left = name.contains("left");
+				float dir = left ? 1.0F : -1.0F;
+				poseStack.translate(dir * 0.55F * strength, -0.38F * strength, 0.25F * strength);
+				rotateAroundPoint(poseStack, dir * 3.25F, 1.85F, 3.65F,
+						-10.0F * strength + 1.8F * highFreq,
+						dir * -12.0F * strength,
+						dir * -14.0F * strength);
 			}
 		}
-		float impact = ArmorCombatClient.diveImpactImpulse(player, partialTick);
-		if (impact > 0.001F && (name.contains("boot_") || name.contains("_boot_"))) {
-			if (name.contains("sole_field") || name.contains("gravity_ring")) {
-				scaleAroundPoint(poseStack, group.centerX(), group.centerY(), group.centerZ(),
-						1.0F + 0.22F * impact, 1.0F + 0.03F * impact, 1.0F + 0.22F * impact);
+
+		// 3. 巡航导弹齐射：肩甲舱门与背部挂架节奏性开启震动
+		if (ArmorCombatClient.attackType(player) == dev.codex.flightarmor.combat.ArmorAttackType.CRUISE_MISSILE_VOLLEY
+				&& ArmorCombatClient.phase(player) != dev.codex.flightarmor.combat.ArmorCombatPhase.IDLE) {
+			float phaseProgress = ArmorCombatClient.phaseProgress(player, partialTick);
+			float bayOpen = switch (ArmorCombatClient.phase(player)) {
+				case CHARGING, WINDUP -> smoothstep(0.0F, 0.65F, phaseProgress);
+				case FIRING -> 1.0F;
+				case RECOVERY -> 1.0F - smoothstep(0.0F, 1.0F, phaseProgress);
+				case IDLE -> 0.0F;
+			};
+			float salvoJolt = Mth.sin(phaseProgress * Mth.PI * 6.0F) * bayOpen;
+			if (name.contains("pauldron_crest") || name.contains("upper_tower")
+					|| name.contains("upper_pauldron") || name.contains("upper_bastion")) {
+				boolean left = name.contains("left");
+				float dir = left ? 1.0F : -1.0F;
+				poseStack.translate(dir * 0.32F * bayOpen, -0.42F * bayOpen + 0.08F * salvoJolt, 0.0F);
+				rotateAround(poseStack, group, -8.0F * bayOpen + 3.0F * salvoJolt,
+						0.0F, dir * -14.0F * bayOpen);
+			} else if (name.contains("backplate_trim") || name.startsWith("vane_")) {
+				poseStack.translate(0.0F, -0.24F * bayOpen, (0.28F + 0.10F * salvoJolt) * bayOpen);
 			}
-			if (name.contains("gravity_ring")) {
-				rotateAround(poseStack, group, 0.0F, 30.0F * impact, 0.0F);
+		}
+
+		// 4. 陨星俯冲重击落地：全身散热口、肩甲、护膝与小腿尾喷罩强制排热张开（Impact Heat-Purge）
+		float impact = ArmorCombatClient.diveImpactImpulse(player, partialTick);
+		if (impact > 0.001F) {
+			if (name.contains("boot_") || name.contains("_boot_")) {
+				if (name.contains("sole_field") || name.contains("gravity_ring")) {
+					scaleAroundPoint(poseStack, group.centerX(), group.centerY(), group.centerZ(),
+							1.0F + 0.24F * impact, 1.0F + 0.04F * impact, 1.0F + 0.24F * impact);
+				}
+				if (name.contains("gravity_ring")) {
+					rotateAround(poseStack, group, 0.0F, 36.0F * impact, 0.0F);
+				}
+				if (name.contains("calf_rear") || name.contains("outer_guard") || name.contains("outer_stabilizer")) {
+					poseStack.translate(0.0F, 0.18F * impact, 0.52F * impact);
+					rotateAround(poseStack, group, 15.0F * impact, 0.0F, 0.0F);
+				}
+			} else if (name.contains("thigh_knee") || name.contains("knee_lock")) {
+				poseStack.translate(0.0F, -0.32F * impact, -0.38F * impact);
+				rotateAround(poseStack, group, -14.0F * impact, 0.0F, 0.0F);
+			} else if (name.contains("upper_pauldron") || name.contains("upper_bastion")) {
+				boolean left = name.contains("left");
+				float dir = left ? 1.0F : -1.0F;
+				poseStack.translate(dir * 0.42F * impact, -0.36F * impact, 0.0F);
+				rotateAround(poseStack, group, 0.0F, 0.0F, dir * -15.0F * impact);
 			}
 		}
 	}
@@ -1641,12 +1779,12 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 		switch (anchor) {
 			case HEAD -> {
 				pitch = pose.headPitchOffset();
-				yaw = 0.0F;
+				yaw = pose.headYawOffset();
 				roll = pose.headRollOffset();
 			}
 			case BODY -> {
 				pitch = pose.bodyPitch();
-				yaw = 0.0F;
+				yaw = pose.bodyYaw();
 				roll = pose.bodyRoll();
 			}
 			case LEFT_ARM -> {
@@ -1957,12 +2095,16 @@ public final class FlightObjArmorRenderer implements ArmorRenderer {
 				|| name.contains("core_housing") || name.contains("thigh_knee")
 				|| name.contains("knee_lock") || name.contains("forearm_cuff")
 				|| name.contains("waist_buckle") || name.contains("pauldron_crest")
+				|| name.contains("upper_tower")
 				|| name.contains("wing_root_shell") || name.contains("wing_tip_shell")) {
 			return LIGHT_TITANIUM;
 		}
-		if (name.contains("cannon_housing") || name.contains("side_trim")
-				|| name.contains("rear_left_fin") || name.contains("rear_right_fin")) {
+		if (name.contains("cannon_housing")) {
 			return CRIMSON;
+		}
+		if (name.contains("side_trim") || name.contains("rear_left_fin")
+				|| name.contains("rear_right_fin")) {
+			return GUNMETAL;
 		}
 		if (name.contains("body_chest_titanium") || name.contains("chest_bastion")
 				|| name.contains("body_backplate_titanium") || name.contains("backplate_sentinel_lock")

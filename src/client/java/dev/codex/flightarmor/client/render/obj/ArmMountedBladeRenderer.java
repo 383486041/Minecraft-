@@ -802,9 +802,99 @@ public final class ArmMountedBladeRenderer {
 			float progress, double time) {
 		BreakerProfile profile = view == BladeView.FIRST_PERSON
 				? FIRST_PERSON_VANGUARD_TRANSFORM : WORLD_VANGUARD_TRANSFORM;
-		renderVariantTransformingBlade(poseStack, buffers, leftArm, profile,
-				progress, time, VANGUARD_ALLOY, VANGUARD_PLATE,
-				VANGUARD.alpha(118), VANGUARD_CORE, 15.0D, 0.02D);
+		SentinelBreakerTimeline.Sample deployment = SentinelBreakerTimeline.sample(progress);
+		double centerX = leftArm ? -profile.centerX() : profile.centerX();
+		Vec3 receiverRear = new Vec3(centerX, profile.receiverRearY(), profile.receiverRearZ());
+		Vec3 receiverFront = new Vec3(centerX, profile.receiverFrontY(), profile.receiverFrontZ());
+		Vec3 receiverDirection = receiverFront.subtract(receiverRear).normalize();
+		Vec3 receiverSide = new Vec3(1.0D, 0.0D, 0.0D);
+		Vec3 receiverNormal = receiverSide.cross(receiverDirection).normalize();
+		Vec3 bladeDirection = new Vec3(0.0D, profile.bladeDirectionY(), profile.bladeDirectionZ()).normalize();
+		Vec3 mechanicalNormal = receiverSide.cross(bladeDirection).normalize();
+		Vec3 energySide = rotateAroundAxis(receiverSide, bladeDirection,
+				Math.toRadians(profile.rollDegrees() * (leftArm ? -1.0D : 1.0D))).normalize();
+		Vec3 energyNormal = energySide.cross(bladeDirection).normalize();
+
+		VertexConsumer metal = buffers.getBuffer(MechanicalBladeRenderType.INSTANCE);
+		// 1. Compact Gundam Forearm Saber Rack Base (Navy + White Titanium + Gold Latch)
+		float rackReveal = smoothstep(0.00F, 0.45F, deployment.unlock());
+		if (rackReveal > 0.001F) {
+			renderReceiverSleeveSegment(metal, poseStack.last(), receiverRear, receiverFront,
+					receiverSide, receiverNormal, profile, 0.05D, 0.58D, rackReveal,
+					VANGUARD_ALLOY, VANGUARD_PLATE);
+			double latchOpen = deployment.jawOpen() * (1.0D - deployment.lock() * 0.45D);
+			for (int s = -1; s <= 1; s += 2) {
+				Vec3 latchOffset = receiverSide.scale(s * (profile.receiverHalfWidth() * 0.54D + 0.14D * latchOpen))
+						.add(receiverNormal.scale(0.08D * latchOpen));
+				renderOrientedBox(metal, poseStack.last(),
+						receiverRear.add(receiverDirection.scale(0.28D)).add(latchOffset),
+						receiverFront.subtract(receiverDirection.scale(0.32D)).add(latchOffset),
+						receiverSide, receiverNormal,
+						profile.receiverHalfWidth() * 0.16D,
+						profile.receiverHalfDepth() * 0.65D,
+						BREAKER_PLATE, VANGUARD_ALLOY);
+			}
+		}
+
+		// 2. Cylindrical / Octagonal Gundam Beam Saber Hilt sliding forward to the wrist
+		double hiltEase = easeOut(deployment.carriage());
+		double hiltTravel = profile.carriageTravel() * deployment.carriage();
+		Vec3 hiltRear = receiverFront.subtract(receiverDirection.scale(1.15D * (1.0D - 0.35D * hiltEase)));
+		Vec3 hiltFront = receiverFront.add(receiverDirection.scale((0.68D + hiltTravel) * hiltEase));
+		if (deployment.carriage() > 0.001F) {
+			// Main White Titanium Saber Grip Cylinder (crossed octagonal boxes)
+			renderOrientedBox(metal, poseStack.last(), hiltRear, hiltFront,
+					receiverSide, mechanicalNormal,
+					0.19D, 0.19D, VANGUARD_PLATE, GUNMETAL);
+			Vec3 diagSide = receiverSide.add(mechanicalNormal).normalize();
+			Vec3 diagNorm = mechanicalNormal.subtract(receiverSide).normalize();
+			renderOrientedBox(metal, poseStack.last(), hiltRear, hiltFront,
+					diagSide, diagNorm,
+					0.175D, 0.175D, VANGUARD_PLATE, GUNMETAL);
+			// Gold Emitter Muzzle Collar & Pommel Ring
+			Vec3 collarStart = hiltFront.subtract(receiverDirection.scale(0.34D));
+			Vec3 collarEnd = hiltFront.add(receiverDirection.scale(0.10D));
+			renderOrientedBox(metal, poseStack.last(), collarStart, collarEnd,
+					receiverSide, mechanicalNormal,
+					0.23D, 0.23D, BREAKER_PLATE, VANGUARD_ALLOY);
+			Vec3 pommelEnd = hiltRear.add(receiverDirection.scale(0.24D));
+			renderOrientedBox(metal, poseStack.last(), hiltRear, pommelEnd,
+					receiverSide, mechanicalNormal,
+					0.21D, 0.21D, GUNMETAL, BREAKER_PLATE);
+		}
+
+		// 3. Compact Focusing Emitter Pin inside the Beam Base
+		Vec3 bladeStart = hiltFront.add(bladeDirection.scale(0.06D));
+		double pinLength = profile.bladeLength() * 0.12D;
+		renderVariantSpineSegment(metal, poseStack.last(), bladeStart, bladeDirection,
+				receiverSide, mechanicalNormal, pinLength, 0.00D, 1.00D,
+				deployment.spineBase(), 0.085D, 0.085D, BREAKER_PLATE, GUNMETAL);
+
+		// 4. 3D Crossed-Plane High-Output Plasma Beam Saber Blade (Cyan Outer Aura + Pure White Core)
+		double pulse = 0.94D + Math.sin(time * 0.52D) * 0.06D;
+		Rgba field = VANGUARD.alpha((int) Math.round(116.0D + pulse * 28.0D));
+		Rgba edge = VANGUARD_CORE.alpha((int) Math.round(224.0D + pulse * 26.0D));
+		if (deployment.breakerHead() > 0.001F) {
+			VertexConsumer fieldEnergy = buffers.getBuffer(ArmorEnergyRenderType.FIELD_ALPHA);
+			renderBreakerEnergyField(fieldEnergy, poseStack.last(), bladeStart,
+					bladeDirection, energySide, energyNormal, profile.bladeLength(),
+					profile.shape(), deployment.breakerHead(), field);
+			// Orthogonal 3D plasma plane so the Beam Saber is volumetric from all angles
+			renderBreakerEnergyField(fieldEnergy, poseStack.last(), bladeStart,
+					bladeDirection, energyNormal, energySide.scale(-1.0D), profile.bladeLength(),
+					profile.shape(), deployment.breakerHead(), field.alpha(96));
+		}
+		VertexConsumer energy = buffers.getBuffer(ArmorEnergyRenderType.INSTANCE);
+		renderBreakerNode(energy, poseStack.last(), hiltFront, bladeDirection,
+				receiverSide, mechanicalNormal, 0.28D, 0.28D, deployment.carriage(), edge);
+		if (deployment.energyEdge() > 0.001F) {
+			renderBreakerEdgeInset(energy, poseStack.last(), bladeStart,
+					bladeDirection, energySide, energyNormal, profile.bladeLength(),
+					profile.shape(), deployment.energyEdge(), edge);
+			renderBreakerEdgeInset(energy, poseStack.last(), bladeStart,
+					bladeDirection, energyNormal, energySide.scale(-1.0D), profile.bladeLength(),
+					profile.shape(), deployment.energyEdge(), edge);
+		}
 	}
 
 	private static void renderSwiftTransformingBlades(PoseStack poseStack,
@@ -812,130 +902,101 @@ public final class ArmMountedBladeRenderer {
 			float progress, double time) {
 		BreakerProfile profile = view == BladeView.FIRST_PERSON
 				? FIRST_PERSON_SWIFT_TRANSFORM : WORLD_SWIFT_TRANSFORM;
-		renderVariantTransformingBlade(poseStack, buffers, leftArm, profile,
-				progress, time, SWIFT_ALLOY, SWIFT_PLATE,
-				SWIFT.alpha(112), SWIFT_CORE, 23.0D, leftArm ? 1.7D : 0.0D);
-	}
-
-	/**
-	 * Sentinel-derived transformation architecture used by the new Vanguard and Swift weapons.
-	 * The silhouettes, receiver dimensions and colors remain variant-specific, but both now
-	 * unfold from armor plate instead of appearing as a held knife or a growing flat decal.
-	 */
-	private static void renderVariantTransformingBlade(PoseStack poseStack,
-			MultiBufferSource buffers, boolean leftArm, BreakerProfile profile,
-			float progress, double time, Rgba alloy, Rgba plate,
-			Rgba fieldBase, Rgba edgeBase, double jawDegrees, double pulseOffset) {
 		SentinelBreakerTimeline.Sample deployment = SentinelBreakerTimeline.sample(progress);
 		double centerX = leftArm ? -profile.centerX() : profile.centerX();
-		Vec3 receiverRear = new Vec3(centerX,
-				profile.receiverRearY(), profile.receiverRearZ());
-		Vec3 receiverFront = new Vec3(centerX,
-				profile.receiverFrontY(), profile.receiverFrontZ());
+		Vec3 receiverRear = new Vec3(centerX, profile.receiverRearY(), profile.receiverRearZ());
+		Vec3 receiverFront = new Vec3(centerX, profile.receiverFrontY(), profile.receiverFrontZ());
 		Vec3 receiverDirection = receiverFront.subtract(receiverRear).normalize();
 		Vec3 receiverSide = new Vec3(1.0D, 0.0D, 0.0D);
 		Vec3 receiverNormal = receiverSide.cross(receiverDirection).normalize();
-		Vec3 bladeDirection = new Vec3(
-				0.0D, profile.bladeDirectionY(), profile.bladeDirectionZ()).normalize();
+		Vec3 bladeDirection = new Vec3(0.0D, profile.bladeDirectionY(), profile.bladeDirectionZ()).normalize();
 		Vec3 mechanicalNormal = receiverSide.cross(bladeDirection).normalize();
 		Vec3 energySide = rotateAroundAxis(receiverSide, bladeDirection,
 				Math.toRadians(profile.rollDegrees() * (leftArm ? -1.0D : 1.0D))).normalize();
 		Vec3 energyNormal = energySide.cross(bladeDirection).normalize();
 
 		VertexConsumer metal = buffers.getBuffer(MechanicalBladeRenderType.INSTANCE);
-		float rootReveal = smoothstep(0.00F, 0.48F, deployment.unlock());
-		float middleReveal = smoothstep(0.18F, 0.76F, deployment.unlock());
-		float frontReveal = smoothstep(0.42F, 1.00F, deployment.unlock());
-		renderReceiverSleeveSegment(metal, poseStack.last(), receiverRear, receiverFront,
-				receiverSide, receiverNormal, profile, 0.00D, 0.31D, rootReveal,
-				alloy, plate);
-		renderReceiverSleeveSegment(metal, poseStack.last(), receiverRear, receiverFront,
-				receiverSide, receiverNormal, profile, 0.35D, 0.66D, middleReveal,
-				plate, alloy);
-		renderReceiverSleeveSegment(metal, poseStack.last(), receiverRear, receiverFront,
-				receiverSide, receiverNormal, profile, 0.70D, 1.00D, frontReveal,
-				alloy, plate);
-
-		double open = deployment.jawOpen() * (1.0D - deployment.lock() * 0.52D);
-		float jawReveal = smoothstep(0.04F, 0.82F,
-				Math.max(deployment.unlock(), deployment.jawOpen()));
-		double jawAngle = Math.toRadians(
-				jawDegrees * deployment.unlock() - 4.0D * deployment.lock());
-		if (jawReveal > 0.001F) {
-			for (int jawSide = -1; jawSide <= 1; jawSide += 2) {
+		// 1. Exia GN Sword Forearm Condenser Shield & Swept Wing Cowl
+		float cowlReveal = smoothstep(0.00F, 0.48F, deployment.unlock());
+		if (cowlReveal > 0.001F) {
+			renderReceiverSleeveSegment(metal, poseStack.last(), receiverRear, receiverFront,
+					receiverSide, receiverNormal, profile, 0.00D, 0.72D, cowlReveal,
+					SWIFT_PLATE, SWIFT_ALLOY);
+			double wingOpen = deployment.jawOpen() * (1.0D - deployment.lock() * 0.35D);
+			for (int s = -1; s <= 1; s += 2) {
 				Vec3 panelSide = rotateAroundAxis(receiverSide, receiverDirection,
-						jawSide * jawAngle).normalize();
+						Math.toRadians(s * 24.0D * deployment.unlock())).normalize();
 				Vec3 panelNormal = receiverDirection.cross(panelSide).normalize();
-				Vec3 lateral = receiverSide.scale(jawSide
-						* (profile.receiverHalfWidth() * 0.68D
-						+ profile.jawTravel() * open));
-				Vec3 lift = receiverNormal.scale(profile.jawLift() * open);
-				Vec3 jawRear = receiverRear.add(receiverDirection.scale(0.18D))
-						.add(lateral).add(lift);
-				Vec3 jawTarget = receiverFront.subtract(receiverDirection.scale(0.16D))
-						.add(lateral).add(lift);
-				Vec3 jawFront = jawRear.lerp(jawTarget, easeOut(jawReveal));
-				renderOrientedBox(metal, poseStack.last(), jawRear, jawFront,
+				Vec3 wingOffset = receiverSide.scale(s * (profile.receiverHalfWidth() * 0.72D + 0.24D * wingOpen))
+						.add(receiverNormal.scale(0.14D * wingOpen));
+				renderOrientedBox(metal, poseStack.last(),
+						receiverRear.add(receiverDirection.scale(0.12D)).add(wingOffset),
+						receiverFront.add(receiverDirection.scale(0.18D)).add(wingOffset),
 						panelSide, panelNormal,
-						profile.receiverHalfWidth() * 0.23D,
-						profile.receiverHalfDepth() * 0.90D, plate, alloy);
+						profile.receiverHalfWidth() * 0.22D,
+						profile.receiverHalfDepth() * 0.78D,
+						SWIFT_ALLOY, BREAKER_PLATE);
 			}
 		}
 
+		// 2. Twin GN Beam Tonfa Emitter Rails (Main Long Blade + Parallel Sub-Blade)
 		double carriageEase = easeOut(deployment.carriage());
 		double carriageTravel = profile.carriageTravel() * deployment.carriage();
-		Vec3 carriageRear = receiverFront.subtract(
-				receiverDirection.scale(0.18D * carriageEase));
-		Vec3 carriageFront = receiverFront.add(receiverDirection.scale(
-				(0.42D + carriageTravel) * carriageEase));
+		Vec3 carriageRear = receiverFront.subtract(receiverDirection.scale(0.22D * carriageEase));
+		Vec3 carriageFront = receiverFront.add(receiverDirection.scale((0.48D + carriageTravel) * carriageEase));
 		if (deployment.carriage() > 0.001F) {
 			renderOrientedBox(metal, poseStack.last(), carriageRear, carriageFront,
 					receiverSide, mechanicalNormal,
-					profile.receiverHalfWidth() * 0.27D,
-					profile.receiverHalfDepth() * 0.60D, plate, alloy);
-			for (int railSide = -1; railSide <= 1; railSide += 2) {
-				Vec3 railOffset = receiverSide.scale(
-						railSide * profile.receiverHalfWidth() * 0.55D);
-				renderOrientedBox(metal, poseStack.last(), carriageRear.add(railOffset),
-						carriageFront.add(railOffset), receiverSide, mechanicalNormal,
-						profile.receiverHalfWidth() * 0.068D,
-						profile.receiverHalfDepth() * 0.34D, plate, alloy);
+					profile.receiverHalfWidth() * 0.32D,
+					profile.receiverHalfDepth() * 0.56D,
+					SWIFT_PLATE, SWIFT_ALLOY);
+			for (int r = -1; r <= 1; r += 2) {
+				Vec3 railOffset = receiverSide.scale(r * profile.receiverHalfWidth() * 0.62D);
+				renderOrientedBox(metal, poseStack.last(),
+						carriageRear.add(railOffset), carriageFront.add(railOffset),
+						receiverSide, mechanicalNormal,
+						0.085D, 0.14D, BREAKER_PLATE, SWIFT_ALLOY);
 			}
 		}
 
+		// 3. Sleek Central GN Condenser Spine
 		Vec3 bladeStart = carriageFront.add(bladeDirection.scale(0.08D));
 		double spineLength = profile.bladeLength() * profile.mechanicalSpineRatio();
 		renderVariantSpineSegment(metal, poseStack.last(), bladeStart, bladeDirection,
-				receiverSide, mechanicalNormal, spineLength, 0.00D, 0.38D,
-				deployment.spineBase(), profile.receiverHalfWidth() * 0.16D,
-				profile.receiverHalfDepth() * 0.48D, plate, alloy);
+				receiverSide, mechanicalNormal, spineLength, 0.00D, 0.55D,
+				deployment.spineBase(), 0.12D, 0.14D, SWIFT_PLATE, SWIFT_ALLOY);
 		renderVariantSpineSegment(metal, poseStack.last(), bladeStart, bladeDirection,
-				receiverSide, mechanicalNormal, spineLength, 0.29D, 0.72D,
-				deployment.spineMiddle(), profile.receiverHalfWidth() * 0.12D,
-				profile.receiverHalfDepth() * 0.39D, alloy, plate);
-		renderVariantSpineSegment(metal, poseStack.last(), bladeStart, bladeDirection,
-				receiverSide, mechanicalNormal, spineLength, 0.63D, 1.00D,
-				deployment.spineTip(), profile.receiverHalfWidth() * 0.078D,
-				profile.receiverHalfDepth() * 0.30D, plate, alloy);
+				receiverSide, mechanicalNormal, spineLength, 0.45D, 1.00D,
+				deployment.spineMiddle(), 0.08D, 0.10D, BREAKER_PLATE, SWIFT_ALLOY);
 
-		/* Never submit another metal vertex after requesting either energy buffer. */
-		double pulse = 0.94D + Math.sin(time * 0.48D + pulseOffset) * 0.06D;
-		Rgba field = fieldBase.alpha((int) Math.round(92.0D + pulse * 26.0D));
-		Rgba edge = edgeBase.alpha((int) Math.round(202.0D + pulse * 24.0D));
+		// 4. Twin GN Particle Blades (Main Long Katana Beam + Offset Parallel Short Sub-Blade)
+		double pulseOffset = leftArm ? 1.7D : 0.0D;
+		double pulse = 0.94D + Math.sin(time * 0.54D + pulseOffset) * 0.06D;
+		Rgba field = SWIFT.alpha((int) Math.round(108.0D + pulse * 28.0D));
+		Rgba edge = SWIFT_CORE.alpha((int) Math.round(218.0D + pulse * 28.0D));
+		Vec3 subBladeOffset = energySide.scale((leftArm ? -1.0D : 1.0D) * 0.34D)
+				.subtract(bladeDirection.scale(0.35D));
 		if (deployment.breakerHead() > 0.001F) {
 			VertexConsumer fieldEnergy = buffers.getBuffer(ArmorEnergyRenderType.FIELD_ALPHA);
 			renderBreakerEnergyField(fieldEnergy, poseStack.last(), bladeStart,
 					bladeDirection, energySide, energyNormal, profile.bladeLength(),
 					profile.shape(), deployment.breakerHead(), field);
+			// Secondary Twin GN Tonfa Sub-Blade (68% length)
+			renderBreakerEnergyField(fieldEnergy, poseStack.last(), bladeStart.add(subBladeOffset),
+					bladeDirection, energySide, energyNormal, profile.bladeLength() * 0.68D,
+					profile.shape(), deployment.breakerHead(), field.alpha(88));
 		}
 		VertexConsumer energy = buffers.getBuffer(ArmorEnergyRenderType.INSTANCE);
 		renderBreakerNode(energy, poseStack.last(), carriageFront, bladeDirection,
 				receiverSide, mechanicalNormal,
-				profile.receiverHalfWidth() * 0.38D,
-				profile.receiverHalfDepth() * 0.70D, deployment.carriage(), edge);
+				profile.receiverHalfWidth() * 0.46D,
+				profile.receiverHalfDepth() * 0.72D, deployment.carriage(), edge);
 		if (deployment.energyEdge() > 0.001F) {
 			renderBreakerEdgeInset(energy, poseStack.last(), bladeStart,
 					bladeDirection, energySide, energyNormal, profile.bladeLength(),
+					profile.shape(), deployment.energyEdge(), edge);
+			renderBreakerEdgeInset(energy, poseStack.last(), bladeStart.add(subBladeOffset),
+					bladeDirection, energySide, energyNormal, profile.bladeLength() * 0.68D,
 					profile.shape(), deployment.energyEdge(), edge);
 		}
 	}

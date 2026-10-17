@@ -133,12 +133,23 @@ public abstract class FirstPersonWeaponRecoilMixin {
 				case SENTINEL -> new CameraActionPose(-side * 0.020F, -0.028F, -0.050F,
 						-12.0F, side * 8.0F, side * 12.0F);
 			};
+			CameraActionPose draw = new CameraActionPose(-side * 0.018F, -0.082F, -0.028F,
+					-32.0F, side * 12.0F, side * 14.0F);
 			CameraActionPose kick = wristPulse(variant, left, 1.0F);
+			CameraActionPose damper = aim.lerp(kick, 0.32F);
 			return switch (phase) {
-				case CHARGING, WINDUP -> zero.lerp(aim, smoothstep(0.0F, 0.62F, progress));
-				case FIRING -> progress < 0.30F
-						? aim.lerp(kick, smoothstep(0.0F, 0.30F, progress))
-						: kick.lerp(aim, smoothstep(0.30F, 1.0F, progress));
+				case CHARGING, WINDUP -> progress < 0.44F
+						? zero.lerp(draw, smoothstep(0.0F, 0.44F, progress))
+						: draw.lerp(aim, smoothstep(0.44F, 1.0F, progress));
+				case FIRING -> {
+					if (progress < 0.20F) {
+						yield aim.lerp(kick, bladeCutIn(progress / 0.20F));
+					}
+					if (progress < 0.58F) {
+						yield kick.lerp(damper, smoothstep(0.20F, 0.58F, progress));
+					}
+					yield damper.lerp(aim, smoothstep(0.58F, 1.0F, progress));
+				}
 				case RECOVERY -> aim.lerp(zero, smoothstep(0.0F, 1.0F, progress));
 				case IDLE -> kick.scale(recoil);
 			};
@@ -254,18 +265,25 @@ public abstract class FirstPersonWeaponRecoilMixin {
 			contact = contact.comboStyle(variant, comboStep, attackingArm);
 			follow = follow.comboStyle(variant, comboStep, attackingArm);
 
+			BladeCameraPose apex = entry.lerp(load, 1.12F);
+			BladeCameraPose hitStop = contact.lerp(follow, 0.24F);
+			BladeCameraPose flourish = follow.lerp(zero, 0.56F);
 			return switch (phase) {
-				case WINDUP, CHARGING -> entry.lerp(load, bladeAnticipation(progress));
+				case WINDUP, CHARGING -> progress < 0.76F
+						? entry.lerp(load, bladeAnticipation(progress / 0.76F))
+						: load.lerp(apex, smoothstep(0.76F, 1.0F, progress));
 				case FIRING -> {
-					// WINDUP already finishes at the loaded pose. Replaying zero -> load
-					// here would add a one-frame backwards pop exactly when the server
-					// commits the blade wave.
-					if (progress < 0.42F) {
-						yield load.lerp(contact, bladeCutIn(progress / 0.42F));
+					if (progress < 0.22F) {
+						yield apex.lerp(contact, bladeCutIn(progress / 0.22F));
 					}
-					yield contact.lerp(follow, bladeCutOut((progress - 0.42F) / 0.58F));
+					if (progress < 0.42F) {
+						yield contact.lerp(hitStop, smoothstep(0.22F, 0.42F, progress));
+					}
+					yield hitStop.lerp(follow, bladeCutOut((progress - 0.42F) / 0.58F));
 				}
-				case RECOVERY -> follow.lerp(zero, bladeSettle(progress));
+				case RECOVERY -> progress < 0.48F
+						? follow.lerp(flourish, smoothstep(0.0F, 0.48F, progress))
+						: flourish.lerp(zero, bladeSettle((progress - 0.48F) / 0.52F));
 				case IDLE -> zero;
 			};
 		}
