@@ -1,41 +1,18 @@
 package dev.codex.flightarmor.client.animation;
 
-import dev.codex.flightarmor.client.FlightArmorClient;
 import dev.codex.flightarmor.client.assembly.ArmorAssemblyClient;
 import dev.codex.flightarmor.item.ModItems;
 import dev.codex.flightarmor.variant.ArmorVariant;
 import dev.codex.flightarmor.variant.ArmorVariantData;
-import dev.kosmx.playerAnim.api.TransformType;
-import dev.kosmx.playerAnim.api.layered.IAnimation;
-import dev.kosmx.playerAnim.core.util.Vec3f;
-import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
-import org.jetbrains.annotations.NotNull;
 
-/** 使用 playerAnimator+bendy-lib 对原版完整皮肤网格进行三轴躯干扭腰与连续肘膝弯曲。 */
-public final class FlightJointAnimation implements IAnimation {
-	private final AbstractClientPlayer player;
-	private FlightPoseFrame pose = FlightPoseFrame.ZERO;
-
-	public FlightJointAnimation(AbstractClientPlayer player) {
-		this.player = player;
+/** 三轴躯干扭腰与连续肘膝弯曲的姿势入口（26.3 起不再依赖 playerAnimator/bendy-lib）。 */
+public final class FlightJointAnimation {
+	private FlightJointAnimation() {
 	}
 
-	@Override
-	public boolean isActive() {
-		return ArmorAssemblyClient.isAnimating(player)
-				|| AttackPoseController.isActive(player)
-				|| FlightArmorClient.flightVisualProgress(player, 1.0F) > 0.001F
-				|| player.isFallFlying();
-	}
-
-	@Override
-	public void setupAnim(float tickDelta) {
-		pose = poseFor(player, tickDelta);
-	}
-
-	/** 人物皮肤、弯曲库和 OBJ 装甲共同使用的唯一姿势入口。 */
+	/** 人物皮肤和 OBJ 装甲共同使用的唯一姿势入口。 */
 	public static FlightPoseFrame poseFor(Player player, float partialTick) {
 		if (ArmorAssemblyClient.isAnimating(player)) {
 			return assemblyPose(player, partialTick);
@@ -173,38 +150,5 @@ public final class FlightJointAnimation implements IAnimation {
 
 	private static float degrees(float value) {
 		return value * Mth.DEG_TO_RAD;
-	}
-
-	@Override
-	public @NotNull Vec3f get3DTransform(@NotNull String modelName, @NotNull TransformType type,
-			float tickDelta, @NotNull Vec3f value0) {
-		if (type == TransformType.BEND) {
-			if (modelName.equals("body") || modelName.equals("torso")) return Vec3f.ZERO;
-			float bend = switch (modelName) {
-				case "leftArm", "left_arm" -> pose.leftElbowBend();
-				case "rightArm", "right_arm" -> pose.rightElbowBend();
-				case "leftLeg", "left_leg" -> pose.leftKneeBend();
-				case "rightLeg", "right_leg" -> pose.rightKneeBend();
-				default -> 0.0F;
-			};
-			return bend == 0.0F ? value0 : new Vec3f(0.0F, bend, 0.0F);
-		}
-		if (type != TransformType.ROTATION) return value0;
-
-		return switch (modelName) {
-			case "body" -> new Vec3f(pose.bodyPitch(), value0.getY() + pose.bodyYaw(), pose.bodyRoll());
-			case "torso" -> value0;
-			case "head" -> value0.add(new Vec3f(
-					pose.headPitchOffset(), pose.headYawOffset(), pose.headRollOffset()));
-			case "leftArm", "left_arm" -> new Vec3f(
-					pose.leftArmPitch(), pose.leftArmYaw(), pose.leftArmRoll());
-			case "rightArm", "right_arm" -> new Vec3f(
-					pose.rightArmPitch(), pose.rightArmYaw(), pose.rightArmRoll());
-			case "leftLeg", "left_leg" -> new Vec3f(
-					pose.leftLegPitch(), pose.leftLegYaw(), pose.leftLegRoll());
-			case "rightLeg", "right_leg" -> new Vec3f(
-					pose.rightLegPitch(), pose.rightLegYaw(), pose.rightLegRoll());
-			default -> value0;
-		};
 	}
 }

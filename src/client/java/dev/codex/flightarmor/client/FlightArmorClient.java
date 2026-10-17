@@ -2,7 +2,6 @@ package dev.codex.flightarmor.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.codex.flightarmor.FlightArmorMod;
-import dev.codex.flightarmor.client.animation.FlightJointAnimationSetup;
 import dev.codex.flightarmor.client.animation.FlightPoseController;
 import dev.codex.flightarmor.client.assembly.ArmorAssemblyClient;
 import dev.codex.flightarmor.client.audio.ArmorSoundController;
@@ -97,7 +96,6 @@ public final class FlightArmorClient implements ClientModInitializer {
         EntityRendererRegistry.register(ModCombatEntities.HOMING_MISSILE, ArmorHomingMissileRenderer::new);
 		EntityRendererRegistry.register(ModCombatEntities.SENTINEL_WINGMAN,
 				SentinelWingmanRenderer::new);
-		FlightJointAnimationSetup.initialize();
 		FlightObjArmorRenderer.initialize();
 		FlightArmorItemPreviewRenderer.initialize();
 		FlightArmorClientSmokeTest.initialize();

@@ -1,10 +1,16 @@
 plugins {
-	id 'fabric-loom' version "${loom_version}"
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
 	id 'maven-publish'
 }
 
 version = project.mod_version
 group = project.maven_group
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(25)
+	}
+}
 
 repositories {
 	mavenCentral()
@@ -30,15 +36,12 @@ loom {
 }
 
 dependencies {
-	// To change the versions see the gradle.properties file
+	// 26.3 起 Minecraft 官方不再混淆发布，无需 mappings，依赖也不需要 remap。
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings loom.officialMojangMappings()
-	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
-	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-	modImplementation "dev.kosmx.player-anim:player-animation-lib-fabric:${project.player_animator_version}"
-	modRuntimeOnly "io.github.kosmx.bendy-lib:bendy-lib-fabric:${project.bendy_lib_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 }
 
 processResources {
@@ -51,7 +54,8 @@ processResources {
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 21
+	it.options.release = 25
+	it.options.compilerArgs += ['-Xmaxerrs', '5000']
 	it.options.encoding = 'UTF-8'
 }
 
@@ -879,11 +883,11 @@ tasks.register('verifyGravityImpactSweep', JavaExec) {
 	mainClass = 'dev.codex.flightarmor.combat.GravityImpactSweepTest'
 }
 
-def remappedRuntimeJar = tasks.named('remapJar').flatMap { it.archiveFile }
+def remappedRuntimeJar = tasks.named('jar').flatMap { it.archiveFile }
 tasks.register('verifyMixinJarContents') {
 	group = 'verification'
 	description = 'Parses packaged mixin configs and verifies every declared runtime class with exact case.'
-	dependsOn tasks.named('remapJar')
+	dependsOn tasks.named('jar')
 	inputs.file(remappedRuntimeJar)
 	doLast {
 		def jarFile = remappedRuntimeJar.get().asFile
