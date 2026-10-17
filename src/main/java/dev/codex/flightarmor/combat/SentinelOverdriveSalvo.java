@@ -60,7 +60,7 @@ final class SentinelOverdriveSalvo {
 				|| expectedLayout == null) {
 			return Optional.empty();
 		}
-		long now = attacker.serverLevel().getGameTime();
+		long now = attacker.level().getGameTime();
 		Optional<FireLayout> authorizedLayout = authorizedLayout(attacker, now);
 		if (authorizedLayout.isEmpty() || authorizedLayout.get() != expectedLayout) {
 			return Optional.empty();
@@ -200,11 +200,11 @@ final class SentinelOverdriveSalvo {
 		if (validImpact && explosionPower > 0.0F) {
 			ArmorVariantAttackResolver.applySentinelOverdriveExplosion(
 					attacker, impactCenter(hit), explosionPower);
-		} else if (damageableTarget && target.hurt(ModDamageTypes.coreBeam(attacker), directDamage)
+		} else if (damageableTarget && target.hurtOrSimulate(ModDamageTypes.coreBeam(attacker), directDamage)
 				&& target instanceof LivingEntity living) {
 			living.knockback(knockback,
-					attacker.getX() - living.getX(), attacker.getZ() - living.getZ());
-			living.hurtMarked = true;
+					attacker.getX() - living.getX(), attacker.getZ() - living.getZ(), null, 0.0F);
+			living.syncVelocity = true;
 		}
 		return new Shot(eventIndex, leftWing, hit.origin(), hit.endpoint(),
 				hit.impactNormal(), hit.hitKind(),

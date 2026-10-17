@@ -7,7 +7,7 @@ import dev.codex.flightarmor.variant.ArmorVariant;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.UUID;
@@ -15,7 +15,7 @@ import java.util.UUID;
 /** S2C 一次性权威光束/命中特效；serverAttackId + eventIndex 是客户端去重键。 */
 public record ArmorAttackFxPayload(
 		UUID attackerId,
-		ResourceLocation dimension,
+		Identifier dimension,
 		long serverAttackId,
 		int eventIndex,
 		ArmorAttackType attackType,
@@ -37,7 +37,7 @@ public record ArmorAttackFxPayload(
 	public static final StreamCodec<RegistryFriendlyByteBuf, ArmorAttackFxPayload> STREAM_CODEC = StreamCodec.of(
 			(buffer, payload) -> {
 				buffer.writeUUID(payload.attackerId());
-				buffer.writeResourceLocation(payload.dimension());
+				buffer.writeIdentifier(payload.dimension());
 				buffer.writeVarLong(payload.serverAttackId());
 				buffer.writeVarInt(payload.eventIndex());
 				buffer.writeVarInt(payload.attackType().ordinal());
@@ -54,7 +54,7 @@ public record ArmorAttackFxPayload(
 			},
 			buffer -> new ArmorAttackFxPayload(
 					buffer.readUUID(),
-					buffer.readResourceLocation(),
+					buffer.readIdentifier(),
 					buffer.readVarLong(),
 					buffer.readVarInt(),
 					ArmorAttackType.fromNetworkId(buffer.readVarInt()),
@@ -77,7 +77,7 @@ public record ArmorAttackFxPayload(
 	}
 
 	/** 常规攻击的判定端点和可见光束端点相同。 */
-	public ArmorAttackFxPayload(UUID attackerId, ResourceLocation dimension, long serverAttackId,
+	public ArmorAttackFxPayload(UUID attackerId, Identifier dimension, long serverAttackId,
 			int eventIndex, ArmorAttackType attackType, ArmorVariant variant, boolean leftHand,
 			Vec3 origin, Vec3 endpoint, Vec3 impactNormal, ArmorAttackHitKind hitKind,
 			int hitEntityId, float charge, boolean underwater) {
@@ -88,7 +88,7 @@ public record ArmorAttackFxPayload(
 	/**
 	 * 兼容仍按旧字段列表创建特效事件的调用点；旧调用统一使用先锋型反馈。
 	 */
-	public ArmorAttackFxPayload(UUID attackerId, ResourceLocation dimension, long serverAttackId,
+	public ArmorAttackFxPayload(UUID attackerId, Identifier dimension, long serverAttackId,
 			int eventIndex, ArmorAttackType attackType, boolean leftHand, Vec3 origin, Vec3 endpoint,
 			Vec3 impactNormal, ArmorAttackHitKind hitKind, int hitEntityId, float charge,
 			boolean underwater) {

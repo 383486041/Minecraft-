@@ -39,13 +39,13 @@ public final class ChargingPlatformController {
 	}
 
 	public static boolean hasRecallableSuit(ServerPlayer player) {
-		return !ArmorOwnershipSavedData.findPlatformBindings(player.getUUID(), player.getServer()).isEmpty();
+		return !ArmorOwnershipSavedData.findPlatformBindings(player.getUUID(), player.level().getServer()).isEmpty();
 	}
 
 	/** 不加载区块的权威位置账本投影。 */
 	public static Optional<OwnershipRuntimeView> ownershipRuntimeView(ServerPlayer player, UUID suitId) {
 		if (player == null || suitId == null) return Optional.empty();
-		return ArmorOwnershipSavedData.findBySuit(suitId, player.getServer())
+		return ArmorOwnershipSavedData.findBySuit(suitId, player.level().getServer())
 				.map(binding -> new OwnershipRuntimeView(binding.ownerId(), binding.suitId(),
 						OwnershipLocation.valueOf(binding.location().name()), binding.dimension(),
 						binding.pos(), binding.revision()));
@@ -66,7 +66,7 @@ public final class ChargingPlatformController {
 		if (player == null || suitId == null || platformId == null || dimension == null || pos == null) {
 			return new PlatformRuntimeView(PlatformHealth.UNBOUND, false, false, null, null);
 		}
-		ServerLevel level = player.getServer().getLevel(dimension);
+		ServerLevel level = player.level().getServer().getLevel(dimension);
 		if (level == null) {
 			return new PlatformRuntimeView(PlatformHealth.DIMENSION_UNAVAILABLE,
 					false, false, null, null);
@@ -136,7 +136,7 @@ public final class ChargingPlatformController {
 		}
 		if (equippedSuitId == null) return false;
 		ArmorOwnershipSavedData.Binding binding = ArmorOwnershipSavedData
-				.findBySuit(equippedSuitId, player.getServer()).orElse(null);
+				.findBySuit(equippedSuitId, player.level().getServer()).orElse(null);
 		if (binding == null || binding.location() != ArmorOwnershipSavedData.Location.CARRIED) return false;
 		for (EquipmentSlot slot : ChargingPlatformBlockEntity.ARMOR_SLOTS) {
 			ItemStack stack = player.getItemBySlot(slot);
@@ -178,7 +178,7 @@ public final class ChargingPlatformController {
 		}
 
 		ArmorOwnershipSavedData.Binding present = requestedSuit == null ? null
-				: ArmorOwnershipSavedData.findBySuit(requestedSuit, player.getServer()).orElse(null);
+				: ArmorOwnershipSavedData.findBySuit(requestedSuit, player.level().getServer()).orElse(null);
 		// Periodic core reconciliation reaches this method every second. A fully identified set
 		// whose authoritative ledger is already CARRIED is an idempotent read, not a new claim:
 		// do not increment the ownership revision, replace ItemStacks, or rebroadcast equipment.
@@ -194,7 +194,7 @@ public final class ChargingPlatformController {
 			// 兼容旧世界：2.16 可能留下 CARRIED 索引，但创造模式换出的四件没有身份。
 			// 仅当恰好有一个携带态索引时尝试恢复该 suitId；重复部件检查仍会阻止复制。
 			List<ArmorOwnershipSavedData.Binding> carried = ArmorOwnershipSavedData
-					.findAll(player.getUUID(), player.getServer()).stream()
+					.findAll(player.getUUID(), player.level().getServer()).stream()
 					.filter(binding -> binding.location() == ArmorOwnershipSavedData.Location.CARRIED)
 					.toList();
 			if (carried.size() == 1) {
@@ -222,7 +222,7 @@ public final class ChargingPlatformController {
 		}
 
 		ArmorOwnershipSavedData.DepositDecision decision = ArmorOwnershipSavedData.prepareCarriedClaim(
-				player.getServer(), player.getUUID(), Optional.of(requestedSuit));
+				player.level().getServer(), player.getUUID(), Optional.of(requestedSuit));
 		if (!decision.allowed()) return OwnershipResult.denied(decision.message());
 		for (EquipmentSlot slot : ChargingPlatformBlockEntity.ARMOR_SLOTS) {
 			player.setItemSlot(slot, claimedCopies.get(slot));
@@ -239,7 +239,7 @@ public final class ChargingPlatformController {
 				return true;
 			}
 		}
-		for (ItemStack candidate : player.getInventory().items) {
+		for (ItemStack candidate : player.getInventory().getNonEquipmentItems()) {
 			if (candidate != equipped && matchesClaimedPart(candidate, player.getUUID(), suitId, slot)) {
 				return true;
 			}
@@ -273,7 +273,7 @@ public final class ChargingPlatformController {
 	 */
 	public static RecallResult tryRecallToPlayer(ServerPlayer player) {
 		ArmorOwnershipSavedData.Binding first = ArmorOwnershipSavedData
-				.findPlatformBindings(player.getUUID(), player.getServer()).stream().findFirst().orElse(null);
+				.findPlatformBindings(player.getUUID(), player.level().getServer()).stream().findFirst().orElse(null);
 		return first == null
 				? RecallResult.failed(RecallFailure.NOT_ON_PLATFORM, "没有找到属于你的平台待机战甲")
 				: tryRecallToPlayer(player, first.suitId());
@@ -285,7 +285,7 @@ public final class ChargingPlatformController {
 			return RecallResult.failed(RecallFailure.PLAYER_UNAVAILABLE, "当前状态无法召回战甲");
 		}
 		ArmorOwnershipSavedData.Binding binding = ArmorOwnershipSavedData
-				.findBySuit(requestedSuitId, player.getServer()).orElse(null);
+				.findBySuit(requestedSuitId, player.level().getServer()).orElse(null);
 		if (binding == null || binding.location() != ArmorOwnershipSavedData.Location.PLATFORM
 				|| !binding.ownerId().equals(player.getUUID())
 				|| binding.dimension() == null || binding.pos() == null) {
@@ -298,7 +298,7 @@ public final class ChargingPlatformController {
 			}
 		}
 
-		ServerLevel originLevel = player.getServer().getLevel(binding.dimension());
+		ServerLevel originLevel = player.level().getServer().getLevel(binding.dimension());
 		if (originLevel == null) {
 			return RecallResult.failed(RecallFailure.PLATFORM_UNAVAILABLE, "充能平台所在维度当前不可用");
 		}
@@ -307,7 +307,7 @@ public final class ChargingPlatformController {
 		if (!(originLevel.getBlockEntity(binding.pos()) instanceof ChargingPlatformBlockEntity platform)
 				|| platform.getOwnerUuid().filter(player.getUUID()::equals).isEmpty()
 				|| platform.getSuitId().filter(binding.suitId()::equals).isEmpty()) {
-			ArmorOwnershipSavedData.markLooseIfMatches(player.getServer(), player.getUUID(), binding.suitId(),
+			ArmorOwnershipSavedData.markLooseIfMatches(player.level().getServer(), player.getUUID(), binding.suitId(),
 					binding.dimension(), binding.pos());
 			return RecallResult.failed(RecallFailure.PLATFORM_INVALID,
 					"平台索引与实际战甲不一致，已停止召回以防复制");
@@ -342,7 +342,7 @@ public final class ChargingPlatformController {
 		}
 
 		if (!ArmorOwnershipSavedData.markCarriedIfMatches(
-				player.getServer(), player.getUUID(), binding.suitId(), binding.dimension(), binding.pos())) {
+				player.level().getServer(), player.getUUID(), binding.suitId(), binding.dimension(), binding.pos())) {
 			for (EquipmentSlot slot : committed) player.setItemSlot(slot, ItemStack.EMPTY);
 			platform.restoreAfterFailedRecall(extracted);
 			syncEquipment(player);
@@ -354,7 +354,7 @@ public final class ChargingPlatformController {
 		// 与整甲平台预览的固定根高度一致，召回首帧不会先向下跳再垂直升空。
 		Vec3 origin = Vec3.atBottomCenterOf(binding.pos()).add(0.0D, 0.625D, 0.0D);
 		return RecallResult.success(sequenceId, binding.suitId(), binding.dimension(), origin,
-				extracted.displayMode(), player.serverLevel().getGameTime());
+				extracted.displayMode(), player.level().getGameTime());
 	}
 
 	public static boolean rollbackRecallToPlatform(ServerPlayer player, RecallResult result) {
@@ -364,13 +364,13 @@ public final class ChargingPlatformController {
 			return false;
 		}
 		ArmorOwnershipSavedData.Binding binding = ArmorOwnershipSavedData
-				.findBySuit(result.suitId(), player.getServer()).orElse(null);
+				.findBySuit(result.suitId(), player.level().getServer()).orElse(null);
 		if (binding == null || binding.location() != ArmorOwnershipSavedData.Location.CARRIED
 				|| !binding.ownerId().equals(player.getUUID())
 				|| !binding.suitId().equals(result.suitId())) {
 			return false;
 		}
-		ServerLevel originLevel = player.getServer().getLevel(result.originDimension());
+		ServerLevel originLevel = player.level().getServer().getLevel(result.originDimension());
 		if (originLevel == null) return false;
 		BlockPos originPos = BlockPos.containing(result.origin());
 		originLevel.getChunkAt(originPos);
@@ -407,7 +407,7 @@ public final class ChargingPlatformController {
 			return false;
 		}
 
-		if (!ArmorOwnershipSavedData.markPlatformIfCarried(player.getServer(), player.getUUID(),
+		if (!ArmorOwnershipSavedData.markPlatformIfCarried(player.level().getServer(), player.getUUID(),
 				result.suitId(), result.originDimension(), originPos)) {
 			ChargingPlatformBlockEntity.ExtractedArmor returned =
 					platform.extractForRecall(player.getUUID(), result.suitId());
@@ -427,12 +427,12 @@ public final class ChargingPlatformController {
 	/** Position-ledger handoff used when a worn suit becomes a quick-switch escort carrier. */
 	public static boolean markCarriedSuitCruising(ServerPlayer player, UUID suitId) {
 		return player != null && suitId != null && ArmorOwnershipSavedData.markCruiseIfCarried(
-				player.getServer(), player.getUUID(), suitId);
+				player.level().getServer(), player.getUUID(), suitId);
 	}
 
 	public static boolean rollbackCarriedSuitCruising(ServerPlayer player, UUID suitId) {
 		return player != null && suitId != null && ArmorOwnershipSavedData.markCarriedIfCruise(
-				player.getServer(), player.getUUID(), suitId);
+				player.level().getServer(), player.getUUID(), suitId);
 	}
 
 	/** Repairs old independent-carrier saves and admits only CARRIED -> CRUISE. */
@@ -461,13 +461,13 @@ public final class ChargingPlatformController {
 	/** 将副战甲的四个真实物品从指定平台移交给 EscortController。 */
 	public static EscortTransfer extractForEscort(ServerPlayer player, UUID requestedSuitId, UUID expectedPlatformId) {
 		ArmorOwnershipSavedData.Binding binding = ArmorOwnershipSavedData
-				.findBySuit(requestedSuitId, player.getServer()).orElse(null);
+				.findBySuit(requestedSuitId, player.level().getServer()).orElse(null);
 		if (binding == null || !binding.ownerId().equals(player.getUUID())
 				|| binding.location() != ArmorOwnershipSavedData.Location.PLATFORM
 				|| binding.dimension() == null || binding.pos() == null) {
 			return EscortTransfer.failed("副战甲不在可召回的平台上");
 		}
-		ServerLevel originLevel = player.getServer().getLevel(binding.dimension());
+		ServerLevel originLevel = player.level().getServer().getLevel(binding.dimension());
 		if (originLevel == null) return EscortTransfer.failed("副战甲所在维度不可用");
 		originLevel.getChunkAt(binding.pos());
 		if (!(originLevel.getBlockEntity(binding.pos()) instanceof ChargingPlatformBlockEntity platform)
@@ -480,7 +480,7 @@ public final class ChargingPlatformController {
 		ChargingPlatformBlockEntity.ExtractedArmor extracted =
 				platform.extractForRecall(player.getUUID(), requestedSuitId);
 		if (extracted == null) return EscortTransfer.failed("副战甲平台提取失败");
-		if (!ArmorOwnershipSavedData.markCruiseIfMatches(player.getServer(), player.getUUID(),
+		if (!ArmorOwnershipSavedData.markCruiseIfMatches(player.level().getServer(), player.getUUID(),
 				requestedSuitId, binding.dimension(), binding.pos())) {
 			platform.restoreAfterFailedRecall(extracted);
 			return EscortTransfer.failed("副战甲位置账本冲突，物品已返回平台");
@@ -491,14 +491,14 @@ public final class ChargingPlatformController {
 
 	public static boolean rollbackEscortTransfer(ServerPlayer player, EscortTransfer transfer) {
 		if (transfer == null || !transfer.success() || transfer.items() == null) return false;
-		ServerLevel originLevel = player.getServer().getLevel(transfer.originDimension());
+		ServerLevel originLevel = player.level().getServer().getLevel(transfer.originDimension());
 		if (originLevel == null) return false;
 		originLevel.getChunkAt(transfer.originPos());
 		if (!(originLevel.getBlockEntity(transfer.originPos()) instanceof ChargingPlatformBlockEntity platform)
 				|| !platform.getPlatformId().equals(transfer.platformId()) || !platform.isEmpty()) return false;
 		platform.restoreAfterFailedRecall(new ChargingPlatformBlockEntity.ExtractedArmor(
 				transfer.ownerId(), transfer.suitId(), transfer.displayMode(), transfer.items()));
-		return ArmorOwnershipSavedData.markPlatformIfCruise(player.getServer(), transfer.ownerId(),
+		return ArmorOwnershipSavedData.markPlatformIfCruise(player.level().getServer(), transfer.ownerId(),
 				transfer.suitId(), transfer.originDimension(), transfer.originPos());
 	}
 
@@ -514,7 +514,7 @@ public final class ChargingPlatformController {
 				|| items.size() != ChargingPlatformBlockEntity.ARMOR_SLOTS.size()) {
 			return EscortReturnResult.failed("护卫返航数据不完整");
 		}
-		ServerLevel level = owner.getServer().getLevel(dimension);
+		ServerLevel level = owner.level().getServer().getLevel(dimension);
 		if (level == null) return EscortReturnResult.failed("绑定平台所在维度不可用");
 		level.getChunkAt(pos);
 		if (!(level.getBlockEntity(pos) instanceof ChargingPlatformBlockEntity platform)
@@ -537,7 +537,7 @@ public final class ChargingPlatformController {
 						owner.getUUID(), suitId, displayMode, List.copyOf(items));
 		try {
 			platform.restoreAfterFailedRecall(returned);
-			if (!ArmorOwnershipSavedData.markPlatformIfCruise(owner.getServer(), owner.getUUID(),
+			if (!ArmorOwnershipSavedData.markPlatformIfCruise(owner.level().getServer(), owner.getUUID(),
 					suitId, dimension, pos)) {
 				platform.extractForRecall(owner.getUUID(), suitId);
 				return EscortReturnResult.failed("护卫位置账本冲突，平台入库已回滚");
@@ -578,7 +578,7 @@ public final class ChargingPlatformController {
 				committed.add(slot);
 			}
 			if (!ArmorOwnershipSavedData.markCarriedIfCruise(
-					owner.getServer(), owner.getUUID(), suitId)) {
+					owner.level().getServer(), owner.getUUID(), suitId)) {
 				throw new IllegalStateException("escort ownership ledger is not in cruise state");
 			}
 			syncEquipment(owner);
@@ -597,8 +597,11 @@ public final class ChargingPlatformController {
 		for (EquipmentSlot slot : ChargingPlatformBlockEntity.ARMOR_SLOTS) {
 			equipment.add(Pair.of(slot, player.getItemBySlot(slot).copy()));
 		}
-		player.serverLevel().getChunkSource().broadcastAndSend(
-				player, new ClientboundSetEquipmentPacket(player.getId(), equipment));
+		ClientboundSetEquipmentPacket packet = new ClientboundSetEquipmentPacket(player.getId(), equipment);
+		player.connection.send(packet);
+		for (ServerPlayer trackingPlayer : net.fabricmc.fabric.api.networking.v1.PlayerLookup.tracking(player)) {
+			if (trackingPlayer != player) trackingPlayer.connection.send(packet);
+		}
 		player.inventoryMenu.broadcastChanges();
 	}
 

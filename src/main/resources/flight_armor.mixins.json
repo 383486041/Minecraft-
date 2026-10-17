@@ -12,18 +12,6 @@
     "ServerPlayerDeathMixin"
   ],
   "client": [
-    "AbstractContainerScreenAccessor",
-    "DiveLegPoseMixin",
-    "CruiseArmorStandModelMixin",
-    "FirstPersonArmorArmMixin",
-    "FirstPersonWeaponRecoilMixin",
-    "InventoryScreenMixin",
-    "ItemInHandRendererInvoker",
-    "MinecraftBladeAttackMixin",
-    "MultiPlayerGameModeHandBeamMixin",
-    "CreativeInventoryScreenMixin",
-	"CreativeSlotWrapperAccessor",
-    "RenderTypeInvoker"
   ],
   "injectors": {
     "defaultRequire": 1

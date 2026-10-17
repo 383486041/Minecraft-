@@ -23,7 +23,7 @@ final class DestructiveLaserController {
 			return new Result(origin == null ? Vec3.ZERO : origin, Vec3.ZERO,
 					ArmorAttackHitKind.MISS, 0, 0.0D);
 		}
-		ServerLevel level = attacker.serverLevel();
+		ServerLevel level = attacker.level();
 		Vec3 delta = requestedEnd.subtract(origin);
 		double requestedDistance = delta.length();
 		if (requestedDistance < 1.0E-6D) {
@@ -78,7 +78,7 @@ final class DestructiveLaserController {
 		if (hit.getType() != HitResult.Type.BLOCK) {
 			return new Result(end, Vec3.ZERO, ArmorAttackHitKind.MISS, 0, budget);
 		}
-		return new Result(hit.getLocation(), Vec3.atLowerCornerOf(hit.getDirection().getNormal()),
+		return new Result(hit.getLocation(), hit.getDirection().getUnitVec3(),
 				ArmorAttackHitKind.BLOCK, 0, budget);
 	}
 

@@ -61,7 +61,7 @@ public final class FlightPhysics {
 	 */
 	public static void applyPreBootFallArrest(Player player) {
 		Vec3 current = player.getDeltaMovement();
-		double minimumVertical = player.isInWaterOrBubble() ? -0.03D : -0.16D;
+		double minimumVertical = player.isInWater() ? -0.03D : -0.16D;
 		if (!player.onGround() && current.y < minimumVertical) {
 			player.setDeltaMovement(current.x, minimumVertical, current.z);
 		}
@@ -72,7 +72,7 @@ public final class FlightPhysics {
 	public static void prepareBootLaunch(Player player) {
 		resetMotionSample(player);
 		Vec3 current = player.getDeltaMovement();
-		double lift = player.isInWaterOrBubble() ? 0.22D : 0.34D;
+		double lift = player.isInWater() ? 0.22D : 0.34D;
 		player.setDeltaMovement(current.x * 0.18D, Math.max(current.y, lift), current.z * 0.18D);
 		player.fallDistance = 0.0F;
 	}
@@ -142,7 +142,7 @@ public final class FlightPhysics {
 							tuning.maxVerticalSpeed()), target.z);
 		}
 
-		boolean underwater = player.isInWaterOrBubble();
+		boolean underwater = player.isInWater();
 		// 下半身浸水、头部仍在外面 = 贴水面滑行，而不是真正入水。
 		boolean skimmingWater = underwater && !player.isEyeInFluid(FluidTags.WATER);
 		// 使用本 tick 已经真正发生的位移作为速度累计状态。deltaMovement 是下一 tick 的计划速度，
@@ -228,7 +228,7 @@ public final class FlightPhysics {
 				Math.max(0.05D, profile.cruise().targetSpeed() * 0.18D));
 		double horizontalScale = horizontalSpeed > safeHorizontalSpeed
 				? safeHorizontalSpeed / horizontalSpeed : 1.0D;
-		double vertical = player.isInWaterOrBubble()
+		double vertical = player.isInWater()
 				? 0.0D : Mth.clamp(current.y * 0.25D, -0.035D, 0.035D);
 		Vec3 settled = new Vec3(current.x * horizontalScale, vertical, current.z * horizontalScale);
 		resetMotionSample(player);

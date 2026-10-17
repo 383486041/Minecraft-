@@ -67,7 +67,7 @@ public final class ArmorCoreController {
 
 	public static boolean hasActiveQuickSwitch(ServerPlayer player) {
 		if (player == null) return false;
-		hydrateQuickSwitches(player.getServer());
+		hydrateQuickSwitches(player.level().getServer());
 		return isCoreChangeLocked(player.getUUID());
 	}
 
@@ -79,8 +79,8 @@ public final class ArmorCoreController {
 	 * 这是「核心赋能」的唯一定义点，任何新的网络能力都应从这里取判据，不要各自复制一套。</p>
 	 */
 	public static boolean coreNetworkActive(ServerPlayer player) {
-		if (player == null || player.getServer() == null) return false;
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		if (player == null || player.level().getServer() == null) return false;
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		return activeIdentity(player, data.record(player.getUUID())).isPresent();
 	}
 
@@ -93,8 +93,8 @@ public final class ArmorCoreController {
 	public static void handleCreativeCoreSync(ServerPlayer player, ArmorCoreCreativeSyncPayload payload) {
 		if (player == null || payload == null || !player.getAbilities().instabuild) return;
 		if (isCoreChangeLocked(player)) {
-			player.displayClientMessage(Component.literal(
-					"战甲移动事务进行中，完成或回滚前不能更换导航核心"), true);
+			player.sendOverlayMessage(Component.literal(
+					"战甲移动事务进行中，完成或回滚前不能更换导航核心"));
 			player.inventoryMenu.sendAllDataToRemote();
 			return;
 		}
@@ -151,19 +151,19 @@ public final class ArmorCoreController {
 	public static boolean activateAndOpen(ServerPlayer player, InteractionHand hand) {
 		if (player == null || hand == null) return false;
 		if (isCoreChangeLocked(player)) {
-			player.displayClientMessage(Component.literal(
-					"战甲移动事务进行中，完成或回滚前不能切换导航核心"), true);
+			player.sendOverlayMessage(Component.literal(
+					"战甲移动事务进行中，完成或回滚前不能切换导航核心"));
 			return false;
 		}
 		ItemStack held = player.getItemInHand(hand);
 		if (!held.is(ModItems.ARMOR_NAVIGATION_CORE)) return false;
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		ArmorCoreSavedData.CoreRecord record = data.record(player.getUUID());
 		ItemStack activated = held.copyWithCount(1);
 		Optional<ArmorCoreIdentity.Identity> claimed =
 				ArmorCoreIdentity.claim(activated, player.getUUID());
 		if (claimed.isEmpty()) {
-			player.displayClientMessage(Component.literal("这枚装甲核心已认主给其他玩家"), true);
+			player.sendOverlayMessage(Component.literal("这枚装甲核心已认主给其他玩家"));
 			return false;
 		}
 
@@ -182,8 +182,8 @@ public final class ArmorCoreController {
 			int returnSlot = player.getInventory().getFreeSlot();
 			if (returnSlot < 0) {
 				held.grow(1);
-				player.displayClientMessage(Component.literal(
-						"\u80CC\u5305\u5DF2\u6EE1\uFF0C\u65E0\u6CD5\u5B89\u5168\u5207\u6362\u88C5\u7532\u6838\u5FC3"), true);
+				player.sendOverlayMessage(Component.literal(
+						"\u80CC\u5305\u5DF2\u6EE1\uFF0C\u65E0\u6CD5\u5B89\u5168\u5207\u6362\u88C5\u7532\u6838\u5FC3"));
 				return false;
 			}
 			player.getInventory().setItem(returnSlot, previous);
@@ -198,13 +198,13 @@ public final class ArmorCoreController {
 	/** 护航 AI 的稳定只读入口；缺失配置自动返回 HOSTILE / 32 / FOLLOW。 */
 	public static ArmorEscortProfile escortProfile(ServerPlayer owner, UUID suitId) {
 		if (owner == null || suitId == null) return ArmorEscortProfile.defaults();
-		return ArmorCoreSavedData.get(owner.getServer()).escortProfile(owner.getUUID(), suitId);
+		return ArmorCoreSavedData.get(owner.level().getServer()).escortProfile(owner.getUUID(), suitId);
 	}
 
 	public static CoreRuntimeView runtimeView(ServerPlayer player) {
 		if (player == null) return CoreRuntimeView.empty();
-		hydrateQuickSwitches(player.getServer());
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		hydrateQuickSwitches(player.level().getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		ArmorCoreSavedData.CoreRecord record = data.record(player.getUUID());
 		Optional<ArmorCoreIdentity.Identity> active = activeIdentity(player, record);
 		List<CoreBindingRuntimeView> bindings = new ArrayList<>(record.linkedSuitIds.size());
@@ -271,7 +271,7 @@ public final class ArmorCoreController {
 	}
 
 	public static Optional<UUID> primaryRecallSuit(ServerPlayer player) {
-		ArmorCoreSavedData.CoreRecord record = ArmorCoreSavedData.get(player.getServer()).record(player.getUUID());
+		ArmorCoreSavedData.CoreRecord record = ArmorCoreSavedData.get(player.level().getServer()).record(player.getUUID());
 		Optional<ArmorCoreIdentity.Identity> identity = activeIdentity(player, record);
 		if (identity.isEmpty() || record.linkedSuitIds.isEmpty()) return Optional.empty();
 		if (record.primarySuitId != null && record.linkedSuitIds.contains(record.primarySuitId)) {
@@ -289,7 +289,7 @@ public final class ArmorCoreController {
 				|| wornFullSuitId(player).filter(suitId::equals).isEmpty()) {
 			return false;
 		}
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		ArmorCoreSavedData.CoreRecord record = data.record(player.getUUID());
 		ArmorCoreIdentity.Identity active = activeIdentity(player, record).orElse(null);
 		if (record.linkedSuitIds.contains(suitId)) return true;
@@ -314,7 +314,7 @@ public final class ArmorCoreController {
 		FormationExecution result = reconcileConfiguredFormation(player, null);
 		if (!result.coreHandled()) return BKeyPlanResult.NO_ACTIVE_CORE;
 		if (!result.message().isBlank()) {
-			player.displayClientMessage(Component.literal(result.message()), true);
+			player.sendOverlayMessage(Component.literal(result.message()));
 		}
 		sendSnapshot(player, result.message());
 		return BKeyPlanResult.HANDLED;
@@ -338,7 +338,7 @@ public final class ArmorCoreController {
 			return;
 		}
 
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		ArmorCoreSavedData.CoreRecord record = data.record(player.getUUID());
 		ArmorCoreIdentity.Identity coreIdentity = activeIdentity(player, record).orElse(null);
 		if (coreIdentity == null) {
@@ -368,7 +368,7 @@ public final class ArmorCoreController {
 		}
 
 		QuickSwitchState state = new QuickSwitchState(coreIdentity, currentSuitId, currentBinding,
-				target.suitId(), target.displayName(), player.serverLevel().getGameTime());
+				target.suitId(), target.displayName(), player.level().getGameTime());
 		state.targetSource = target.source();
 		if (!beginQuickSwitch(player, state)) {
 			switchMessage(player, "message.flight_armor.quick_switch.busy");
@@ -383,8 +383,8 @@ public final class ArmorCoreController {
 		// tickServer 的临时反重力保护托住玩家，成功或回滚完成后再重建正式悬停。
 		FlightController.remove(player);
 		applyQuickSwitchFallSafety(player);
-		player.displayClientMessage(Component.translatable(
-				"message.flight_armor.quick_switch.started", target.displayName()), true);
+		player.sendOverlayMessage(Component.translatable(
+				"message.flight_armor.quick_switch.started", target.displayName()));
 	}
 
 	/** Returns whether the exact suit selected by a status panel can enter the existing switch transaction. */
@@ -394,7 +394,7 @@ public final class ArmorCoreController {
 			return false;
 		}
 		ArmorCoreSavedData.CoreRecord record =
-				ArmorCoreSavedData.get(player.getServer()).record(player.getUUID());
+				ArmorCoreSavedData.get(player.level().getServer()).record(player.getUUID());
 		if (activeIdentity(player, record).isEmpty()) return false;
 		UUID currentSuitId = wornFullSuitId(player).orElse(null);
 		if (currentSuitId == null || currentSuitId.equals(targetSuitId)
@@ -412,7 +412,7 @@ public final class ArmorCoreController {
 			return TargetedSwitchResult.failed("\u6218\u7532\u6B63\u5728\u5207\u6362\u6216\u7EC4\u88C5\uFF0C\u8BF7\u7A0D\u5019");
 		}
 		ArmorCoreSavedData.CoreRecord record =
-				ArmorCoreSavedData.get(player.getServer()).record(player.getUUID());
+				ArmorCoreSavedData.get(player.level().getServer()).record(player.getUUID());
 		ArmorCoreIdentity.Identity coreIdentity = activeIdentity(player, record).orElse(null);
 		if (coreIdentity == null) {
 			return TargetedSwitchResult.failed("\u9700\u8981\u5148\u6FC0\u6D3B\u5E76\u88C5\u5907\u7ED1\u5B9A\u8FD9\u4E24\u5957\u6218\u7532\u7684\u5BFC\u822A\u6838\u5FC3");
@@ -437,7 +437,7 @@ public final class ArmorCoreController {
 		}
 
 		QuickSwitchState state = new QuickSwitchState(coreIdentity, currentSuitId, currentBinding,
-				target.suitId(), target.displayName(), player.serverLevel().getGameTime());
+				target.suitId(), target.displayName(), player.level().getGameTime());
 		state.targetSource = target.source();
 		if (!beginQuickSwitch(player, state)) {
 			return TargetedSwitchResult.failed("\u6218\u7532\u5207\u6362\u4E8B\u52A1\u5DF2\u5728\u8FD0\u884C");
@@ -467,7 +467,7 @@ public final class ArmorCoreController {
 	 * 任一异步失败都会转入 RECOVERING，并在服务器持续防坠期间重试召回旧甲。
 	 */
 	private static boolean beginQuickSwitch(ServerPlayer player, QuickSwitchState state) {
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		if (!data.beginQuickSwitch(state.persistent(player.getUUID(), 0L))) return false;
 		if (QUICK_SWITCHES.putIfAbsent(player.getUUID(), state) == null) return true;
 		data.removeQuickSwitch(player.getUUID(), state.transactionId, 0L);
@@ -475,7 +475,7 @@ public final class ArmorCoreController {
 	}
 
 	private static void discardQuickSwitch(ServerPlayer player, QuickSwitchState state) {
-		ArmorCoreSavedData.get(player.getServer()).removeQuickSwitch(
+		ArmorCoreSavedData.get(player.level().getServer()).removeQuickSwitch(
 				player.getUUID(), state.transactionId, state.revision);
 		QUICK_SWITCHES.remove(player.getUUID(), state);
 	}
@@ -491,7 +491,7 @@ public final class ArmorCoreController {
 	}
 
 	private static boolean removePersistedQuickSwitch(ServerPlayer player, QuickSwitchState state) {
-		boolean removed = ArmorCoreSavedData.get(player.getServer()).removeQuickSwitch(
+		boolean removed = ArmorCoreSavedData.get(player.level().getServer()).removeQuickSwitch(
 				player.getUUID(), state.transactionId, state.revision);
 		if (removed) QUICK_SWITCHES.remove(player.getUUID(), state);
 		return removed;
@@ -618,8 +618,8 @@ public final class ArmorCoreController {
 				state.phase = QuickSwitchPhase.INBOUND;
 				state.phaseStartGameTime = now;
 				if (!persistQuickSwitch(server, entry.getKey(), state)) continue;
-				player.displayClientMessage(Component.translatable(
-						"message.flight_armor.quick_switch.inbound", state.targetName), true);
+				player.sendOverlayMessage(Component.translatable(
+						"message.flight_armor.quick_switch.inbound", state.targetName));
 				sendSnapshot(player);
 				continue;
 			}
@@ -640,7 +640,7 @@ public final class ArmorCoreController {
 		FlightController.suspendForQuickSwitch(player);
 		FlightPhysics.applyPreBootFallArrest(player);
 		if (!player.onGround()) FlightPhysics.prepareHoverEngagement(player);
-		player.hurtMarked = true;
+		player.syncVelocity = true;
 	}
 
 	private static void completeQuickSwitch(ServerPlayer player, QuickSwitchState state) {
@@ -652,11 +652,11 @@ public final class ArmorCoreController {
 				ArmorEscortController.returnToPlatform(player, state.outgoingSuitId,
 						state.outgoingBinding.platformId(), state.outgoingBinding.dimension(),
 						state.outgoingBinding.pos());
-		player.displayClientMessage(Component.translatable(
-				"message.flight_armor.quick_switch.complete", state.targetName), true);
+		player.sendOverlayMessage(Component.translatable(
+				"message.flight_armor.quick_switch.complete", state.targetName));
 		if (!returned.success()) {
-			player.displayClientMessage(Component.literal(
-					"目标战甲已穿戴；旧甲返台失败，已保持无攻击待机：" + returned.message()), false);
+			player.sendSystemMessage(Component.literal(
+					"目标战甲已穿戴；旧甲返台失败，已保持无攻击待机：" + returned.message()));
 		}
 		sendSnapshot(player);
 	}
@@ -673,12 +673,12 @@ public final class ArmorCoreController {
 			case PLAYER_DIED -> "玩家死亡";
 			case PLAYER_UNAVAILABLE -> "玩家暂不可用";
 		};
-		player.displayClientMessage(Component.literal(cause + "；旧甲已实际恢复穿戴"), true);
+		player.sendOverlayMessage(Component.literal(cause + "；旧甲已实际恢复穿戴"));
 		sendSnapshot(player);
 	}
 
 	private static void setQuickSwitchPrimary(ServerPlayer player, UUID suitId) {
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		ArmorCoreSavedData.CoreRecord record = data.record(player.getUUID());
 		activeIdentity(player, record).ifPresent(identity ->
 				data.setPrimary(player.getUUID(), identity, suitId));
@@ -693,7 +693,7 @@ public final class ArmorCoreController {
 		state.recoveryCause = cause;
 		state.nextRecoveryAttemptTick = now;
 		state.targetCancellationComplete = !targetWasInbound;
-		if (!persistQuickSwitch(player.getServer(), player.getUUID(), state)) return;
+		if (!persistQuickSwitch(player.level().getServer(), player.getUUID(), state)) return;
 		if (targetWasInbound) state.targetCancellationComplete = cancelInboundSwitchSuit(player, state);
 		retryOutgoingSuitRecovery(player, state, now);
 	}
@@ -721,15 +721,15 @@ public final class ArmorCoreController {
 					} else if (state.recoveryCause == RecoveryCause.TARGET_FAILED) {
 						switchMessage(player, "message.flight_armor.quick_switch.target_failed");
 					} else {
-						player.displayClientMessage(Component.literal(
-								"旧甲交接未完成，已实际发起旧甲恢复召回"), true);
+						player.sendOverlayMessage(Component.literal(
+								"旧甲交接未完成，已实际发起旧甲恢复召回"));
 					}
 				}
 				return;
 			}
 			announceRecoveryWaiting(player, state, attempt.detail());
 		} finally {
-			persistQuickSwitch(player.getServer(), player.getUUID(), state);
+			persistQuickSwitch(player.level().getServer(), player.getUUID(), state);
 		}
 	}
 	private static void announceRecoveryWaiting(ServerPlayer player, QuickSwitchState state, String detail) {
@@ -737,8 +737,8 @@ public final class ArmorCoreController {
 		state.recoveryWaitingAnnounced = true;
 		String cause = state.recoveryCause == RecoveryCause.TIMEOUT ? "切换已超时"
 				: state.recoveryCause == RecoveryCause.TARGET_FAILED ? "目标召回失败" : "旧甲交接失败";
-		player.displayClientMessage(Component.literal(
-				cause + "；旧甲恢复尚未完成并会持续重试：" + detail), true);
+		player.sendOverlayMessage(Component.literal(
+				cause + "；旧甲恢复尚未完成并会持续重试：" + detail));
 	}
 
 	private static RecoveryAttempt attemptOutgoingSuitRecovery(ServerPlayer player,
@@ -782,7 +782,7 @@ public final class ArmorCoreController {
 	private static InboundSource inboundSource(ServerPlayer player, UUID suitId) {
 		if (player == null || suitId == null) return null;
 		ArmorCoreSavedData.CoreRecord record =
-				ArmorCoreSavedData.get(player.getServer()).record(player.getUUID());
+				ArmorCoreSavedData.get(player.level().getServer()).record(player.getUUID());
 		SwitchTarget target = resolveSwitchTarget(player, record, suitId);
 		return target == null ? null : target.source();
 	}
@@ -893,7 +893,7 @@ public final class ArmorCoreController {
 	}
 
 	private static void switchMessage(ServerPlayer player, String key) {
-		player.displayClientMessage(Component.translatable(key), true);
+		player.sendOverlayMessage(Component.translatable(key));
 	}
 
 	/**
@@ -904,23 +904,23 @@ public final class ArmorCoreController {
 		if (player == null || hand == null || platform == null
 				|| !player.getItemInHand(hand).is(ModItems.ARMOR_NAVIGATION_CORE)) return false;
 		if (isCoreChangeLocked(player)) {
-			player.displayClientMessage(Component.literal(
-					"战甲移动事务进行中，暂时不能更换核心或绑定平台"), true);
+			player.sendOverlayMessage(Component.literal(
+					"战甲移动事务进行中，暂时不能更换核心或绑定平台"));
 			return false;
 		}
 		if (!platform.isComplete()) {
-			player.displayClientMessage(Component.literal(
-					"平台需要先放齐头盔、胸甲、护腿和战靴"), true);
+			player.sendOverlayMessage(Component.literal(
+					"平台需要先放齐头盔、胸甲、护腿和战靴"));
 			return false;
 		}
 		if (platform.getOwnerUuid().filter(player.getUUID()::equals).isEmpty()) {
-			player.displayClientMessage(Component.literal(
-					"该平台战甲不属于你，无法接入核心"), true);
+			player.sendOverlayMessage(Component.literal(
+					"该平台战甲不属于你，无法接入核心"));
 			return false;
 		}
 		if (platform.getSuitId().isEmpty()) {
-			player.displayClientMessage(Component.literal(
-					"平台战甲缺少唯一身份，无法绑定"), true);
+			player.sendOverlayMessage(Component.literal(
+					"平台战甲缺少唯一身份，无法绑定"));
 			return false;
 		}
 		if (!(platform.getLevel() instanceof ServerLevel level)) return false;
@@ -929,7 +929,7 @@ public final class ArmorCoreController {
 		ArmorCoreIdentity.Identity nextIdentity =
 				ArmorCoreIdentity.claim(activated, player.getUUID()).orElse(null);
 		if (nextIdentity == null) {
-			player.displayClientMessage(Component.literal("这枚装甲核心已认主给其他玩家"), true);
+			player.sendOverlayMessage(Component.literal("这枚装甲核心已认主给其他玩家"));
 			return false;
 		}
 		UUID suitId = platform.getSuitId().orElseThrow();
@@ -938,11 +938,11 @@ public final class ArmorCoreController {
 		ArmorCoreSavedData.PlatformBinding binding = new ArmorCoreSavedData.PlatformBinding(
 				suitId, platform.getPlatformId(), level.dimension(), platform.getBlockPos(), variant,
 				ArmorCoreSavedData.defaultName(variant, suitId));
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		ArmorCoreSavedData.CoreRecord record = data.record(player.getUUID());
 		if (!data.canBind(player.getUUID(), nextIdentity, binding)) {
-			player.displayClientMessage(Component.literal(
-					"\u5f53\u524d\u6838\u5fc3\u65e0\u6cd5\u7ed1\u5b9a\u8be5\u5e73\u53f0\uff0c\u8bf7\u68c0\u67e5\u7ed1\u5b9a\u4e0a\u9650\u6216\u6838\u5fc3\u8eab\u4efd"), true);
+			player.sendOverlayMessage(Component.literal(
+					"\u5f53\u524d\u6838\u5fc3\u65e0\u6cd5\u7ed1\u5b9a\u8be5\u5e73\u53f0\uff0c\u8bf7\u68c0\u67e5\u7ed1\u5b9a\u4e0a\u9650\u6216\u6838\u5fc3\u8eab\u4efd"));
 			return false;
 		}
 		ItemStack previous = record.core.isEmpty() ? ItemStack.EMPTY : record.core.copyWithCount(1);
@@ -954,8 +954,8 @@ public final class ArmorCoreController {
 		if (!sameCore && !previous.isEmpty()) {
 			returnSlot = player.getInventory().getFreeSlot();
 			if (returnSlot < 0) {
-				player.displayClientMessage(Component.literal(
-						"背包已满，无法安全切换并绑定这枚装甲核心"), true);
+				player.sendOverlayMessage(Component.literal(
+						"背包已满，无法安全切换并绑定这枚装甲核心"));
 				return false;
 			}
 		}
@@ -975,15 +975,15 @@ public final class ArmorCoreController {
 				}
 				held.grow(1);
 			}
-			player.displayClientMessage(Component.literal(
-					"平台绑定提交失败，核心与物品已恢复"), true);
+			player.sendOverlayMessage(Component.literal(
+					"平台绑定提交失败，核心与物品已恢复"));
 			player.inventoryMenu.broadcastChanges();
 			return false;
 		}
 		player.getInventory().setChanged();
 		player.inventoryMenu.broadcastChanges();
-		player.displayClientMessage(Component.literal("充能平台已绑定到装甲核心："
-				+ binding.displayName()), true);
+		player.sendOverlayMessage(Component.literal("充能平台已绑定到装甲核心："
+				+ binding.displayName()));
 		openMenu(player);
 		return true;
 	}
@@ -1011,7 +1011,7 @@ public final class ArmorCoreController {
 		ArmorCoreSavedData.PlatformBinding binding = new ArmorCoreSavedData.PlatformBinding(
 				suitId, platform.getPlatformId(), level.dimension(), platform.getBlockPos(), variant,
 				ArmorCoreSavedData.defaultName(variant, suitId));
-		if (ArmorCoreSavedData.get(player.getServer()).refreshBoundPlatform(player.getUUID(), binding)) {
+		if (ArmorCoreSavedData.get(player.level().getServer()).refreshBoundPlatform(player.getUUID(), binding)) {
 			sendSnapshot(player);
 		}
 	}
@@ -1022,7 +1022,7 @@ public final class ArmorCoreController {
 				|| platform.getOwnerUuid().filter(player.getUUID()::equals).isEmpty()) return false;
 		UUID suitId = platform.getSuitId().orElse(null);
 		if (suitId == null || !(platform.getLevel() instanceof ServerLevel level)) return false;
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		ArmorCoreSavedData.CoreRecord record = data.record(player.getUUID());
 		Optional<ArmorCoreIdentity.Identity> identity = activeIdentity(player, record);
 		if (identity.isEmpty()) return false;
@@ -1034,8 +1034,8 @@ public final class ArmorCoreController {
 		boolean changed = data.bind(player.getUUID(), identity.get(), binding);
 		boolean bound = binding.equals(record.bindings.get(suitId));
 		if (changed) {
-			if (notifyPlayer) player.displayClientMessage(
-					Component.literal("充能平台已绑定到装甲核心：" + binding.displayName()), true);
+			if (notifyPlayer) player.sendOverlayMessage(
+					Component.literal("充能平台已绑定到装甲核心：" + binding.displayName()));
 			sendSnapshot(player);
 		}
 		return bound;
@@ -1049,7 +1049,7 @@ public final class ArmorCoreController {
 		if (isMovementAction(payload.action())
 				&& (hasActiveQuickSwitch(player) || ArmorAssemblyController.isAnimating(player))) {
 			String result = "已有战甲移动事务进行中；本次核心命令未执行";
-			player.displayClientMessage(Component.literal(result), true);
+			player.sendOverlayMessage(Component.literal(result));
 			sendSnapshot(player, result, payload.clientSequence(), payload.action(), payload.suitId());
 			return;
 		}
@@ -1070,7 +1070,7 @@ public final class ArmorCoreController {
 			case DEPLOY_SELECTED_WORN -> deploySelectedWorn(player, payload.suitId());
 			case TOGGLE_REMOTE_COMMAND -> toggleRemoteCommand(player, payload.suitId());
 		};
-		if (!result.isBlank()) player.displayClientMessage(Component.literal(result), true);
+		if (!result.isBlank()) player.sendOverlayMessage(Component.literal(result));
 		sendSnapshot(player, result, payload.clientSequence(), payload.action(), payload.suitId());
 	}
 
@@ -1103,11 +1103,11 @@ public final class ArmorCoreController {
 	}
 
 	private static String bindLookedAt(ServerPlayer player) {
-		ArmorCoreSavedData.CoreRecord record = ArmorCoreSavedData.get(player.getServer()).record(player.getUUID());
+		ArmorCoreSavedData.CoreRecord record = ArmorCoreSavedData.get(player.level().getServer()).record(player.getUUID());
 		if (activeIdentity(player, record).isEmpty()) return "请先右键激活一枚装甲核心";
 		HitResult hit = player.pick(6.0D, 0.0F, false);
 		if (!(hit instanceof BlockHitResult blockHit)) return "请看向 6 格内的充能平台";
-		if (!(player.serverLevel().getBlockEntity(blockHit.getBlockPos()) instanceof ChargingPlatformBlockEntity platform)) {
+		if (!(player.level().getBlockEntity(blockHit.getBlockPos()) instanceof ChargingPlatformBlockEntity platform)) {
 			return "目标不是充能平台";
 		}
 		if (!platform.isComplete()) return "平台需要先放齐头盔、胸甲、护腿和战靴";
@@ -1141,7 +1141,7 @@ public final class ArmorCoreController {
 
 	private static String setPrimary(ServerPlayer player, UUID suitId) {
 		if (suitId == null) return "请先选择一套战甲";
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		ArmorCoreSavedData.CoreRecord record = data.record(player.getUUID());
 		Optional<ArmorCoreIdentity.Identity> identity = activeIdentity(player, record);
 		String blocked = primaryRoleChangeBlockReason(player);
@@ -1162,7 +1162,7 @@ public final class ArmorCoreController {
 	private static String returnEscort(ServerPlayer player, UUID suitId) {
 		if (suitId == null) return "请先选择一套护卫战甲";
 		ArmorCoreSavedData.CoreRecord record =
-				ArmorCoreSavedData.get(player.getServer()).record(player.getUUID());
+				ArmorCoreSavedData.get(player.level().getServer()).record(player.getUUID());
 		if (activeIdentity(player, record).isEmpty()) return "装甲核心未激活或身份无效";
 		ArmorCoreSavedData.PlatformBinding binding = record.bindings.get(suitId);
 		if (binding == null) return "所选护卫未绑定原始平台";
@@ -1201,7 +1201,7 @@ public final class ArmorCoreController {
 					? cycleEscortStanceForAllLoaded(player)
 					: "请先选择一套副战甲";
 		}
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		ArmorCoreSavedData.CoreRecord record = data.record(player.getUUID());
 		Optional<ArmorCoreIdentity.Identity> identity = activeIdentity(player, record);
 		if (identity.isEmpty()) return "装甲核心未激活或身份无效";
@@ -1267,7 +1267,7 @@ public final class ArmorCoreController {
 		List<ArmorEscortController.LoadedEscort> escorts =
 				ArmorEscortController.loadedEscorts(player);
 		if (escorts.isEmpty()) return "附近没有已加载的护航副甲";
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		ArmorCoreSavedData.CoreRecord record = data.record(player.getUUID());
 		Optional<ArmorCoreIdentity.Identity> identity = activeIdentity(player, record);
 		if (identity.isEmpty()) return "装甲核心未激活或身份无效";
@@ -1306,7 +1306,7 @@ public final class ArmorCoreController {
 
 	private static String forgetMissingSuit(ServerPlayer player, UUID suitId) {
 		if (suitId == null) return "\u8bf7\u5148\u9009\u62e9\u4e00\u5957\u5931\u8054\u6218\u7532";
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		ArmorCoreSavedData.CoreRecord record = data.record(player.getUUID());
 		ArmorCoreIdentity.Identity coreIdentity = activeIdentity(player, record).orElse(null);
 		if (coreIdentity == null) return "\u88c5\u7532\u6838\u5fc3\u672a\u88c5\u5907\u6216\u8eab\u4efd\u65e0\u6548";
@@ -1331,7 +1331,7 @@ public final class ArmorCoreController {
 				&& (cruise == null || cruise.suitId() == null || suitId.equals(cruise.suitId()))) {
 			return "\u72ec\u7acb\u5de1\u822a\u8f7d\u4f53\u7d22\u5f15\u5c1a\u5728\uff0c\u9700\u5148\u6062\u590d\u8f7d\u4f53\u518d\u5904\u7406";
 		}
-		if (ArmorEscortController.hasRecoverableSuit(player.getServer(), suitId)) {
+		if (ArmorEscortController.hasRecoverableSuit(player.level().getServer(), suitId)) {
 			return "\u62a4\u822a\u8f7d\u4f53\u6216\u672a\u52a0\u8f7d\u7d22\u5f15\u5c1a\u5728\uff0c\u4e0d\u80fd\u79fb\u9664\u5173\u8054";
 		}
 
@@ -1340,12 +1340,12 @@ public final class ArmorCoreController {
 		if (ownership != null
 				&& ownership.location() == ChargingPlatformController.OwnershipLocation.LOOSE
 				&& ownership.dimension() != null && ownership.pos() != null) {
-			ServerLevel looseLevel = player.getServer().getLevel(ownership.dimension());
+			ServerLevel looseLevel = player.level().getServer().getLevel(ownership.dimension());
 			if (looseLevel == null || !looseLevel.hasChunkAt(ownership.pos())) {
 				return "\u6563\u843d\u6218\u7532\u6700\u540e\u8bb0\u5f55\u7684\u533a\u5757\u672a\u52a0\u8f7d\uff0c\u4e0d\u80fd\u5224\u5b9a\u5df2\u4e22\u5931";
 			}
 		}
-		if (hasLoadedSuitPartEvidence(player.getServer(), player.getUUID(), suitId)) {
+		if (hasLoadedSuitPartEvidence(player.level().getServer(), player.getUUID(), suitId)) {
 			return "\u4ecd\u5728\u5df2\u52a0\u8f7d\u4e16\u754c\u6216\u73a9\u5bb6\u7269\u54c1\u680f\u4e2d\u53d1\u73b0\u8be5\u6218\u7532\u90e8\u4ef6";
 		}
 
@@ -1409,7 +1409,7 @@ public final class ArmorCoreController {
 
 	private static String recallSelected(ServerPlayer player, UUID suitId, boolean escort) {
 		if (suitId == null) return "请先选择一套战甲";
-		ArmorCoreSavedData.CoreRecord record = ArmorCoreSavedData.get(player.getServer()).record(player.getUUID());
+		ArmorCoreSavedData.CoreRecord record = ArmorCoreSavedData.get(player.level().getServer()).record(player.getUUID());
 		if (activeIdentity(player, record).isEmpty()) return "装甲核心未装备或身份无效";
 		if (!record.linkedSuitIds.contains(suitId)) return "所选战甲不在当前核心中";
 		SuitRuntimeSnapshot.SuitState runtime =
@@ -1471,7 +1471,7 @@ public final class ArmorCoreController {
 
 	private static FormationExecution reconcileConfiguredFormation(ServerPlayer player, UUID selectedPrimary) {
 		if (player == null) return FormationExecution.inactive();
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		ArmorCoreSavedData.CoreRecord record = data.record(player.getUUID());
 		ArmorCoreIdentity.Identity identity = activeIdentity(player, record).orElse(null);
 		if (identity == null) return FormationExecution.inactive();
@@ -1596,7 +1596,7 @@ public final class ArmorCoreController {
 
 	private static String validatePlatform(ServerPlayer player,
 			ArmorCoreSavedData.PlatformBinding binding, boolean loadChunk) {
-		ServerLevel level = player.getServer().getLevel(binding.dimension());
+		ServerLevel level = player.level().getServer().getLevel(binding.dimension());
 		if (level == null) return binding.displayName() + " 所在维度不可用";
 		if (loadChunk) level.getChunkAt(binding.pos());
 		else if (!level.hasChunkAt(binding.pos())) return binding.displayName() + " 平台区块未加载";
@@ -1698,7 +1698,7 @@ public final class ArmorCoreController {
 			boolean hasHome = state.platformId() != null
 					&& state.homeDimension() != null && state.homePosition() != null;
 			entries.add(new ArmorCoreSnapshotPayload.Entry(state.suitId(), state.displayName(), state.variant(),
-					displayDimension.location(), displayPosition.getX(),
+					displayDimension.identifier(), displayPosition.getX(),
 					displayPosition.getY(), displayPosition.getZ(),
 					legacyCoreStatus(state), profile.attackMode(), profile.rangeBlocks(), profile.stance(),
 					hasHome, ArmorCoreSnapshotPayload.Entry.encodeAllowedActions(state.allowedActions())));
@@ -1717,7 +1717,7 @@ public final class ArmorCoreController {
 	 */
 	private static boolean reconcileWornSuitAssociation(ServerPlayer player) {
 		if (player == null || !ModItems.hasFullSet(player)) return false;
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		ArmorCoreSavedData.CoreRecord record = data.record(player.getUUID());
 		ArmorCoreIdentity.Identity active = activeIdentity(player, record).orElse(null);
 		if (active == null) return false;
@@ -1739,7 +1739,7 @@ public final class ArmorCoreController {
 		UUID replacement = ArmorPrimaryFailoverPolicy.selectRecallablePrimaryForB(snapshot)
 				.orElse(null);
 		if (replacement == null) return false;
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		ArmorCoreSavedData.CoreRecord current = data.record(player.getUUID());
 		ArmorCoreIdentity.Identity identity = activeIdentity(player, current).orElse(null);
 		if (identity == null
@@ -1755,7 +1755,7 @@ public final class ArmorCoreController {
 	}
 	/** Promotes a healthy linked suit only after the current primary has authoritative missing evidence. */
 	private static boolean reconcileMissingPrimary(ServerPlayer player) {
-		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.getServer());
+		ArmorCoreSavedData data = ArmorCoreSavedData.get(player.level().getServer());
 		ArmorCoreSavedData.CoreRecord before = data.record(player.getUUID());
 		ArmorCoreIdentity.Identity identity = activeIdentity(player, before).orElse(null);
 		if (identity == null) return false;
@@ -1778,8 +1778,8 @@ public final class ArmorCoreController {
 				.filter(suit -> suit.suitId().equals(replacement))
 				.map(SuitRuntimeSnapshot.SuitState::displayName)
 				.findFirst().orElse(replacement.toString().substring(0, 8));
-		player.displayClientMessage(Component.literal(
-				"原主战甲已确认失联，已自动切换主战甲：" + replacementName), true);
+		player.sendOverlayMessage(Component.literal(
+				"原主战甲已确认失联，已自动切换主战甲：" + replacementName));
 		FlightArmorMod.LOGGER.info("Armor core primary failover owner={} missing={} replacement={}",
 				player.getUUID(), snapshot.primarySuitId(), replacement);
 		return true;
@@ -1950,14 +1950,14 @@ public final class ArmorCoreController {
 	}
 	public static void handleJoin(ServerPlayer player) {
 		if (player != null) {
-			hydrateQuickSwitches(player.getServer());
+			hydrateQuickSwitches(player.level().getServer());
 			reconcileWornSuitAssociation(player);
 		}
 	}
 
 	public static void handleDeath(ServerPlayer player) {
 		if (player == null) return;
-		hydrateQuickSwitches(player.getServer());
+		hydrateQuickSwitches(player.level().getServer());
 		QuickSwitchState state = QUICK_SWITCHES.get(player.getUUID());
 		if (state == null) return;
 		UUID rescuedSuit = ArmorCruiseController.runtimeView(player)
@@ -1979,17 +1979,17 @@ public final class ArmorCoreController {
 				return;
 			}
 		}
-		markQuickSwitchRecovery(player.getServer(), player.getUUID(), state,
-				player.serverLevel().getGameTime(), RecoveryCause.PLAYER_DIED);
+		markQuickSwitchRecovery(player.level().getServer(), player.getUUID(), state,
+				player.level().getGameTime(), RecoveryCause.PLAYER_DIED);
 	}
 
 	public static void handleRespawn(ServerPlayer player) {
 		if (player == null) return;
-		hydrateQuickSwitches(player.getServer());
+		hydrateQuickSwitches(player.level().getServer());
 		QuickSwitchState state = QUICK_SWITCHES.get(player.getUUID());
 		if (state != null && state.phase == QuickSwitchPhase.RECOVERING) {
-			state.nextRecoveryAttemptTick = player.serverLevel().getGameTime();
-			persistQuickSwitch(player.getServer(), player.getUUID(), state);
+			state.nextRecoveryAttemptTick = player.level().getGameTime();
+			persistQuickSwitch(player.level().getServer(), player.getUUID(), state);
 		}
 	}
 

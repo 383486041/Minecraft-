@@ -23,9 +23,9 @@ public final class ArmorExplosionEffects {
 	private ArmorExplosionEffects() {
 	}
 
-	public static Explosion explodeWithSonicReport(ServerLevel level, Entity source,
+	public static void explodeWithSonicReport(ServerLevel level, Entity source,
 			Vec3 center, float power, boolean fire, Level.ExplosionInteraction interaction) {
-		return explode(level, source, null, null, center, power, fire, interaction,
+		explode(level, source, null, null, center, power, fire, interaction,
 				ModSoundEvents.sonicExplosionSound());
 	}
 
@@ -34,20 +34,20 @@ public final class ArmorExplosionEffects {
 	 * explosions. It keeps native Minecraft explosion damage/knockback and
 	 * particles while replacing only this call's report with the lighter mix.
 	 */
-	public static Explosion explodeWithLightReport(ServerLevel level, Entity source,
+	public static void explodeWithLightReport(ServerLevel level, Entity source,
 			Vec3 center, float power, boolean fire, Level.ExplosionInteraction interaction) {
-		return explode(level, source, null, null, center, power, fire, interaction,
+		explode(level, source, null, null, center, power, fire, interaction,
 				ModSoundEvents.lightweightWeaponExplosionSound());
 	}
 
-	public static Explosion explodeWithLightReport(ServerLevel level, Entity source,
+	public static void explodeWithLightReport(ServerLevel level, Entity source,
 			DamageSource damageSource, ExplosionDamageCalculator damageCalculator,
 			Vec3 center, float power, boolean fire, Level.ExplosionInteraction interaction) {
-		return explode(level, source, damageSource, damageCalculator, center, power, fire,
+		explode(level, source, damageSource, damageCalculator, center, power, fire,
 				interaction, ModSoundEvents.lightweightWeaponExplosionSound());
 	}
 
-	private static Explosion explode(ServerLevel level, Entity source,
+	private static void explode(ServerLevel level, Entity source,
 			DamageSource damageSource, ExplosionDamageCalculator damageCalculator,
 			Vec3 center, float power, boolean fire, Level.ExplosionInteraction interaction,
 			Holder<SoundEvent> sound) {
@@ -57,9 +57,9 @@ public final class ArmorExplosionEffects {
 		}
 		ParticleOptions small = ParticleTypes.EXPLOSION;
 		ParticleOptions large = ParticleTypes.EXPLOSION_EMITTER;
-		return level.explode(source, damageSource, damageCalculator,
+		level.explode(source, damageSource, damageCalculator,
 				center.x, center.y, center.z, power, fire, interaction,
-				small, large, sound);
+				small, large, net.minecraft.util.random.WeightedList.of(), sound);
 	}
 
 	private static boolean finite(Vec3 value) {

@@ -1,16 +1,17 @@
 package dev.codex.flightarmor.cruise;
 
-import net.minecraft.core.HolderLookup;
+import dev.codex.flightarmor.FlightArmorMod;
+import dev.codex.flightarmor.util.TagUtils;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -24,15 +25,16 @@ import java.util.UUID;
  */
 final class ArmorCruiseSavedData extends SavedData {
 	private static final String DATA_NAME = "flight_armor_cruise_index";
-	private static final SavedData.Factory<ArmorCruiseSavedData> FACTORY = new SavedData.Factory<>(
+	private static final SavedDataType<ArmorCruiseSavedData> TYPE = new SavedDataType<>(
+			FlightArmorMod.id(DATA_NAME),
 			ArmorCruiseSavedData::new,
-			ArmorCruiseSavedData::load,
+			CompoundTag.CODEC.xmap(ArmorCruiseSavedData::load, data -> data.save(new CompoundTag())),
 			DataFixTypes.LEVEL);
 
 	private final Map<UUID, Locator> locators = new HashMap<>();
 
 	static ArmorCruiseSavedData get(MinecraftServer server) {
-		return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+		return server.overworld().getDataStorage().computeIfAbsent(TYPE);
 	}
 
 	static void put(MinecraftServer server, Locator locator) {
@@ -60,27 +62,27 @@ final class ArmorCruiseSavedData extends SavedData {
 		return new ArrayList<>(get(server).locators.values());
 	}
 
-	private static ArmorCruiseSavedData load(CompoundTag root, HolderLookup.Provider registries) {
+	private static ArmorCruiseSavedData load(CompoundTag root) {
 		ArmorCruiseSavedData data = new ArmorCruiseSavedData();
-		ListTag list = root.getList("Carriers", Tag.TAG_COMPOUND);
+		ListTag list = root.getListOrEmpty("Carriers");
 		for (int index = 0; index < list.size(); index++) {
-			CompoundTag tag = list.getCompound(index);
+			CompoundTag tag = list.getCompoundOrEmpty(index);
 			try {
-				UUID owner = tag.getUUID("Owner");
-				UUID carrier = tag.getUUID("Carrier");
-				UUID suit = tag.hasUUID("Suit") ? tag.getUUID("Suit") : null;
-				ResourceLocation dimensionId = ResourceLocation.parse(tag.getString("Dimension"));
+				UUID owner = TagUtils.getUUID(tag, "Owner");
+				UUID carrier = TagUtils.getUUID(tag, "Carrier");
+				UUID suit = TagUtils.hasUUID(tag, "Suit") ? TagUtils.getUUID(tag, "Suit") : null;
+				Identifier dimensionId = Identifier.parse(tag.getStringOr("Dimension", ""));
 				ResourceKey<Level> dimension = ResourceKey.create(Registries.DIMENSION, dimensionId);
 				ArmorCruisePhase phase;
 				try {
-					phase = ArmorCruisePhase.valueOf(tag.getString("PhaseName"));
+					phase = ArmorCruisePhase.valueOf(tag.getStringOr("PhaseName", ""));
 				} catch (IllegalArgumentException ignored) {
-					phase = ArmorCruisePhase.fromNetworkId(tag.getInt("Phase"));
+					phase = ArmorCruisePhase.fromNetworkId(tag.getIntOr("Phase", 0));
 				}
 				Locator locator = new Locator(owner, carrier, suit, dimension,
-						tag.getInt("ChunkX"), tag.getInt("ChunkZ"), phase,
-						new Vec3(tag.getDouble("AnchorX"), tag.getDouble("AnchorY"), tag.getDouble("AnchorZ")),
-						tag.getLong("Sequence"));
+						tag.getIntOr("ChunkX", 0), tag.getIntOr("ChunkZ", 0), phase,
+						new Vec3(tag.getDoubleOr("AnchorX", 0.0), tag.getDoubleOr("AnchorY", 0.0), tag.getDoubleOr("AnchorZ", 0.0)),
+						tag.getLongOr("Sequence", 0L));
 				data.locators.put(owner, locator);
 			} catch (RuntimeException ignored) {
 				// 单条损坏记录不应阻止其余战甲恢复；实体本身仍保留完整物品 NBT。
@@ -89,15 +91,14 @@ final class ArmorCruiseSavedData extends SavedData {
 		return data;
 	}
 
-	@Override
-	public CompoundTag save(CompoundTag root, HolderLookup.Provider registries) {
+	public CompoundTag save(CompoundTag root) {
 		ListTag list = new ListTag();
 		for (Locator locator : locators.values()) {
 			CompoundTag tag = new CompoundTag();
-			tag.putUUID("Owner", locator.ownerId);
-			tag.putUUID("Carrier", locator.carrierId);
-			if (locator.suitId != null) tag.putUUID("Suit", locator.suitId);
-			tag.putString("Dimension", locator.dimension.location().toString());
+			TagUtils.putUUID(tag, "Owner", locator.ownerId);
+			TagUtils.putUUID(tag, "Carrier", locator.carrierId);
+			if (locator.suitId != null) TagUtils.putUUID(tag, "Suit", locator.suitId);
+			tag.putString("Dimension", locator.dimension.identifier().toString());
 			tag.putInt("ChunkX", locator.chunkX);
 			tag.putInt("ChunkZ", locator.chunkZ);
 			tag.putInt("Phase", locator.phase.ordinal());

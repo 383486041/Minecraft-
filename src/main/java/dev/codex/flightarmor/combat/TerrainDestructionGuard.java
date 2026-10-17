@@ -8,7 +8,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.TagKey;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -42,7 +42,7 @@ final class TerrainDestructionGuard {
 		return level != null && player != null
 				&& !player.isSpectator()
 				&& player.getAbilities().mayBuild
-				&& level.getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING);
+				&& Boolean.TRUE.equals(level.getGameRules().get(GameRules.MOB_GRIEFING));
 	}
 
 	static Decision evaluate(ServerLevel level, ServerPlayer player, BlockPos position) {

@@ -8,7 +8,7 @@ import dev.codex.flightarmor.variant.ArmorVariant;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -79,14 +79,14 @@ public record ArmorCoreSnapshotPayload(long revision, boolean coreEquipped, UUID
 	}
 
 	public record Entry(UUID suitId, String displayName, ArmorVariant variant,
-			ResourceLocation dimension, int x, int y, int z, Status status,
+			Identifier dimension, int x, int y, int z, Status status,
 			ArmorEscortProfile.CombatPolicy attackMode, int rangeBlocks, ArmorEscortProfile.EscortAnchor stance,
 			boolean hasHome, int actionMask) {
 		private void write(RegistryFriendlyByteBuf buffer) {
 			buffer.writeUUID(suitId);
 			buffer.writeUtf(displayName, 64);
 			buffer.writeUtf(variant.serializedName(), 16);
-			buffer.writeResourceLocation(dimension);
+			buffer.writeIdentifier(dimension);
 			buffer.writeInt(x); buffer.writeInt(y); buffer.writeInt(z);
 			buffer.writeVarInt(status.ordinal());
 			buffer.writeUtf(attackMode.name(), 16);
@@ -97,7 +97,7 @@ public record ArmorCoreSnapshotPayload(long revision, boolean coreEquipped, UUID
 		}
 		private static Entry read(RegistryFriendlyByteBuf buffer) {
 			return new Entry(buffer.readUUID(), buffer.readUtf(64),
-					ArmorVariant.fromSerializedName(buffer.readUtf(16)), buffer.readResourceLocation(),
+					ArmorVariant.fromSerializedName(buffer.readUtf(16)), buffer.readIdentifier(),
 					buffer.readInt(), buffer.readInt(), buffer.readInt(),
 					Status.fromNetworkId(buffer.readVarInt()),
 					ArmorEscortProfile.CombatPolicy.fromName(buffer.readUtf(16)),

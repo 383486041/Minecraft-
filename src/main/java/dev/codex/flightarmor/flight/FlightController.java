@@ -149,7 +149,7 @@ public final class FlightController {
 					|| (source == AutomaticHoverSource.DOCKING_COMPLETE
 						&& previous.automaticSource() == AutomaticHoverSource.DOCKING_BOOTS));
 		if (!canUseRegularFlightGear(player) || player.onGround()
-				|| (!continuingEmergencyRecall && !upgradingBootHover && !player.isInWaterOrBubble()
+				|| (!continuingEmergencyRecall && !upgradingBootHover && !player.isInWater()
 				&& player.getDeltaMovement().y >= -0.03D)
 				|| !ServerPlayNetworking.canSend(player, AutomaticHoverEngagePayload.TYPE)) {
 			return false;
@@ -191,7 +191,7 @@ public final class FlightController {
 		if (player.onGround()) {
 			if (!permitGroundLift) return OrdinaryEquipHoverResult.WAITING_FOR_LIFTOFF;
 			FlightPhysics.prepareBootLaunch(player);
-			player.hurtMarked = true;
+			player.syncVelocity = true;
 			return OrdinaryEquipHoverResult.GROUND_LIFT_PREPARED;
 		}
 		return beginAutomaticHover(player, AutomaticHoverSource.ORDINARY_EQUIP,
@@ -231,7 +231,7 @@ public final class FlightController {
 		if (player.onGround()) {
 			// 地面着装先由战靴轻抬离地；下一服务端 tick 再建立不会被 onGround 门禁立即关闭的悬停会话。
 			FlightPhysics.prepareBootLaunch(player);
-			player.hurtMarked = true;
+			player.syncVelocity = true;
 			return false;
 		}
 		return beginAutomaticHover(player, source, sourceSequenceId, sourceAttemptId, true);
@@ -250,7 +250,7 @@ public final class FlightController {
 				&& ArmorCruiseController.isEmergencyRecallHoverAuthorized(
 				player, sourceSequenceId, sourceAttemptId)) {
 			FlightPhysics.prepareHoverEngagement(player);
-			player.hurtMarked = true;
+			player.syncVelocity = true;
 			return true;
 		}
 		if (!hasBaseFlightEligibility(player) || player.onGround()
@@ -284,7 +284,7 @@ public final class FlightController {
 		STATES.put(player.getUUID(), hover);
 		setDivePose(player, false);
 		FlightPhysics.prepareHoverEngagement(player);
-		player.hurtMarked = true;
+		player.syncVelocity = true;
 		if (previous == null || visualStateChanged(previous, hover)) {
 			broadcastVisualState(player, true, false, false, false);
 		}
@@ -334,7 +334,7 @@ public final class FlightController {
 					FlightPhysics.resetMotionSample(player);
 					FlightState impacted = state.withPhysicsSample(player.getDeltaMovement(), 0);
 					STATES.replace(player.getUUID(), state, impacted);
-					player.hurtMarked = true;
+					player.syncVelocity = true;
 					continue;
 				}
 			}
@@ -364,7 +364,7 @@ public final class FlightController {
 				if (blasted > 0) {
 					// 炸开了就保住撞击前的动量；否则每撞一下都被撞停，穿山会变成一格一格地蹭。
 					player.setDeltaMovement(impact);
-					player.hurtMarked = true;
+					player.syncVelocity = true;
 				}
 			}
 		}
@@ -391,7 +391,7 @@ public final class FlightController {
 			// the local result; retain forced sync for hover, contact and the final brake handoff.
 			if (!state.diving() || player.horizontalCollision || player.verticalCollision
 					|| readyTicks >= BRAKE_TO_HOVER_CONFIRM_TICKS) {
-				player.hurtMarked = true;
+				player.syncVelocity = true;
 			}
 		}
 	}
@@ -484,7 +484,7 @@ public final class FlightController {
 		}
 		ServerPlayNetworking.send(player, new AutomaticHoverEngagePayload(
 				state.automaticEngagementId(), state.automaticSource(),
-				state.sourceSequenceId(), state.sourceAttemptId(), state.dimension().location()));
+				state.sourceSequenceId(), state.sourceAttemptId(), state.dimension().identifier()));
 	}
 
 	private static void sendAutomaticHoverEnd(ServerPlayer player, long engagementId) {

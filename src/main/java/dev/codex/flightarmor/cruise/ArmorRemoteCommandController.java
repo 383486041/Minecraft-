@@ -163,7 +163,7 @@ public final class ArmorRemoteCommandController {
 					ArmorRemoteCommandAckPayload.Outcome.OUT_OF_RANGE,
 					"所选战甲载体已更换或离开 48 格范围，遥控已取消");
 		}
-		long now = owner.serverLevel().getGameTime();
+		long now = owner.level().getGameTime();
 		if (state.pending != null && now > state.pending.expiresAt) {
 			sendAck(owner, state.pending.clientSequence, state.suitId, true,
 					ArmorRemoteCommandAckPayload.Outcome.REJECTED,
@@ -489,7 +489,7 @@ public final class ArmorRemoteCommandController {
 			state.pending = null;
 		}
 
-		LivingEntity target = resolveTarget(owner.serverLevel(),
+		LivingEntity target = resolveTarget(owner.level(),
 				state.pending == null ? state.meleeTargetId : state.pending.targetId);
 		if (target != null && !isValidTarget(owner, target)) target = null;
 		if (target != null && !insideControlSphere(
@@ -567,7 +567,7 @@ public final class ArmorRemoteCommandController {
 		}
 		Vec3 target = predictedFormationPoint(owner, state.suitId,
 				plan.predictionTicks(), plan.verticalClearance());
-		target = groundAwareFollowPoint(owner.serverLevel(), owner.position().y, target);
+		target = groundAwareFollowPoint(owner.level(), owner.position().y, target);
 		target = clampToControlSphere(owner, target, 0.75D);
 		moveCarrier(carrier, target, plan.maxSpeed());
 		if (meleePose) setMeleeReadyPose(carrier);
@@ -599,7 +599,7 @@ public final class ArmorRemoteCommandController {
 	private static void tickMelee(ServerPlayer owner, ArmorStand carrier,
 			RemoteState state, LivingEntity target, long now) {
 		Vec3 targetCenter = target.getBoundingBox().getCenter();
-		Vec3 lowTarget = lowHoverPoint(owner.serverLevel(), target.position());
+		Vec3 lowTarget = lowHoverPoint(owner.level(), target.position());
 		Vec3 offset = carrier.position().subtract(targetCenter);
 		if (offset.lengthSqr() < 1.0E-6D) offset = new Vec3(0.0D, 0.0D, 1.0D);
 		offset = new Vec3(offset.x, 0.0D, offset.z).normalize().scale(1.45D);
@@ -765,8 +765,8 @@ public final class ArmorRemoteCommandController {
 		// Heightmaps point to the overworld surface even while the owner is underground. Only use
 		// that sample when it is locally relevant, otherwise LOS steering remains conservative.
 		if (surface <= ownerY + 7.0D) y = Math.max(y, surface + 0.25D);
-		y = Mth.clamp(y, level.getMinBuildHeight() + 1.0D,
-				level.getMaxBuildHeight() - 2.0D);
+		y = Mth.clamp(y, level.getMinY() + 1.0D,
+				level.getMaxY() - 2.0D);
 		return new Vec3(desired.x, y, desired.z);
 	}
 
@@ -784,8 +784,8 @@ public final class ArmorRemoteCommandController {
 		int x = Mth.floor(desired.x);
 		int z = Mth.floor(desired.z);
 		double ground = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
-		double y = Mth.clamp(ground + 0.15D, level.getMinBuildHeight() + 1.0D,
-				level.getMaxBuildHeight() - 2.0D);
+		double y = Mth.clamp(ground + 0.15D, level.getMinY() + 1.0D,
+				level.getMaxY() - 2.0D);
 		return new Vec3(desired.x, y, desired.z);
 	}
 
@@ -818,7 +818,7 @@ public final class ArmorRemoteCommandController {
 		Vec3 movement = delta.scale(speed / distance);
 		carrier.setPos(carrier.position().add(movement));
 		carrier.setDeltaMovement(movement);
-		carrier.hasImpulse = true;
+		carrier.syncVelocity = true;
 		float yaw = (float) Math.toDegrees(Math.atan2(-delta.x, delta.z));
 		carrier.setYRot(Mth.rotLerp(0.38F, carrier.getYRot(), yaw));
 		carrier.setYBodyRot(carrier.getYRot());

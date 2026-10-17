@@ -50,7 +50,7 @@ import dev.codex.flightarmor.wardrobe.ArmorWardrobeController;
 import dev.codex.flightarmor.sound.ModSoundEvents;
 import dev.codex.flightarmor.suitpanel.ArmorSuitPanelController;
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.entity.event.v1.ServerEntityWorldChangeEvents;
+import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -60,7 +60,7 @@ import net.fabricmc.fabric.api.networking.v1.EntityTrackingEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,40 +82,40 @@ public final class FlightArmorMod implements ModInitializer {
 		ArmorEscortController.initialize();
 		ArmorCombatController.initialize();
 
-		PayloadTypeRegistry.playC2S().register(FlightInputPayload.TYPE, FlightInputPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playC2S().register(ArmorAttackIntentPayload.TYPE, ArmorAttackIntentPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playC2S().register(ArmorRemoteCommandPayload.TYPE,
+		PayloadTypeRegistry.serverboundPlay().register(FlightInputPayload.TYPE, FlightInputPayload.STREAM_CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(ArmorAttackIntentPayload.TYPE, ArmorAttackIntentPayload.STREAM_CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(ArmorRemoteCommandPayload.TYPE,
 				ArmorRemoteCommandPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playC2S().register(ArmorCruiseCombatCommandPayload.TYPE,
+		PayloadTypeRegistry.serverboundPlay().register(ArmorCruiseCombatCommandPayload.TYPE,
 				ArmorCruiseCombatCommandPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playC2S().register(SentinelWingmanCommandPayload.TYPE,
+		PayloadTypeRegistry.serverboundPlay().register(SentinelWingmanCommandPayload.TYPE,
 				SentinelWingmanCommandPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playC2S().register(AutomaticHoverAckPayload.TYPE, AutomaticHoverAckPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playC2S().register(ArmorAssemblyRequestPayload.TYPE, ArmorAssemblyRequestPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playC2S().register(ArmorWardrobeRequestPayload.TYPE, ArmorWardrobeRequestPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playC2S().register(ArmorCoreOpenPayload.TYPE, ArmorCoreOpenPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playC2S().register(ArmorCoreActionPayload.TYPE, ArmorCoreActionPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playC2S().register(ArmorQuickSwitchPayload.TYPE, ArmorQuickSwitchPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playC2S().register(ArmorCoreCreativeSyncPayload.TYPE,
+		PayloadTypeRegistry.serverboundPlay().register(AutomaticHoverAckPayload.TYPE, AutomaticHoverAckPayload.STREAM_CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(ArmorAssemblyRequestPayload.TYPE, ArmorAssemblyRequestPayload.STREAM_CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(ArmorWardrobeRequestPayload.TYPE, ArmorWardrobeRequestPayload.STREAM_CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(ArmorCoreOpenPayload.TYPE, ArmorCoreOpenPayload.STREAM_CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(ArmorCoreActionPayload.TYPE, ArmorCoreActionPayload.STREAM_CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(ArmorQuickSwitchPayload.TYPE, ArmorQuickSwitchPayload.STREAM_CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(ArmorCoreCreativeSyncPayload.TYPE,
 				ArmorCoreCreativeSyncPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playC2S().register(ArmorConfigurationTogglePayload.TYPE,
+		PayloadTypeRegistry.serverboundPlay().register(ArmorConfigurationTogglePayload.TYPE,
 				ArmorConfigurationTogglePayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(FlightVisualStatePayload.TYPE, FlightVisualStatePayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(SonicBoomFxPayload.TYPE, SonicBoomFxPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(AutomaticHoverEngagePayload.TYPE, AutomaticHoverEngagePayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(AutomaticHoverEndPayload.TYPE, AutomaticHoverEndPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(ArmorAssemblyStatePayload.TYPE, ArmorAssemblyStatePayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(ArmorPlatformRecallPayload.TYPE, ArmorPlatformRecallPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(ArmorCruiseStatePayload.TYPE, ArmorCruiseStatePayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(ArmorCruiseCombatStatePayload.TYPE,
+		PayloadTypeRegistry.clientboundPlay().register(FlightVisualStatePayload.TYPE, FlightVisualStatePayload.STREAM_CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(SonicBoomFxPayload.TYPE, SonicBoomFxPayload.STREAM_CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(AutomaticHoverEngagePayload.TYPE, AutomaticHoverEngagePayload.STREAM_CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(AutomaticHoverEndPayload.TYPE, AutomaticHoverEndPayload.STREAM_CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(ArmorAssemblyStatePayload.TYPE, ArmorAssemblyStatePayload.STREAM_CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(ArmorPlatformRecallPayload.TYPE, ArmorPlatformRecallPayload.STREAM_CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(ArmorCruiseStatePayload.TYPE, ArmorCruiseStatePayload.STREAM_CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(ArmorCruiseCombatStatePayload.TYPE,
 				ArmorCruiseCombatStatePayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(ArmorCombatOwnerStatePayload.TYPE, ArmorCombatOwnerStatePayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(ArmorCombatVisualStatePayload.TYPE, ArmorCombatVisualStatePayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(ArmorBladeStatePayload.TYPE, ArmorBladeStatePayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(ArmorAttackFxPayload.TYPE, ArmorAttackFxPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(ArmorCoreSnapshotPayload.TYPE, ArmorCoreSnapshotPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(ArmorEscortStatePayload.TYPE, ArmorEscortStatePayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(ArmorRemoteCommandAckPayload.TYPE,
+		PayloadTypeRegistry.clientboundPlay().register(ArmorCombatOwnerStatePayload.TYPE, ArmorCombatOwnerStatePayload.STREAM_CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(ArmorCombatVisualStatePayload.TYPE, ArmorCombatVisualStatePayload.STREAM_CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(ArmorBladeStatePayload.TYPE, ArmorBladeStatePayload.STREAM_CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(ArmorAttackFxPayload.TYPE, ArmorAttackFxPayload.STREAM_CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(ArmorCoreSnapshotPayload.TYPE, ArmorCoreSnapshotPayload.STREAM_CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(ArmorEscortStatePayload.TYPE, ArmorEscortStatePayload.STREAM_CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(ArmorRemoteCommandAckPayload.TYPE,
 				ArmorRemoteCommandAckPayload.STREAM_CODEC);
 		ServerPlayNetworking.registerGlobalReceiver(FlightInputPayload.TYPE,
 				(payload, context) -> FlightController.handleInput(context.player(), payload));
@@ -216,7 +216,7 @@ public final class FlightArmorMod implements ModInitializer {
 				ArmorCoreController.handleDeath(player);
 			}
 		});
-		ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD.register(
+		ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL.register(
 				(player, origin, destination) -> {
 					SentinelWingmanController.removeOwner(player.getUUID());
 					ArmorRemoteCommandController.remove(player);
@@ -252,7 +252,7 @@ public final class FlightArmorMod implements ModInitializer {
 		LOGGER.info("凌空战甲已加载：单穿凌空战靴或装备完整套装均可飞行");
 	}
 
-	public static ResourceLocation id(String path) {
-		return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
+	public static Identifier id(String path) {
+		return Identifier.fromNamespaceAndPath(MOD_ID, path);
 	}
 }

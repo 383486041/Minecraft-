@@ -7,10 +7,12 @@ import dev.codex.flightarmor.sound.ModSoundEvents;
 import dev.codex.flightarmor.variant.ArmorVariant;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.nbt.CompoundTag;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundSource;
@@ -44,10 +46,10 @@ import java.util.UUID;
  * owner/suit/side pair only while that worn configuration remains authorized.</p>
  */
 public final class SentinelWingmanEntity extends Entity {
-	private static final EntityDataAccessor<Optional<UUID>> OWNER_ID =
-			SynchedEntityData.defineId(SentinelWingmanEntity.class, EntityDataSerializers.OPTIONAL_UUID);
-	private static final EntityDataAccessor<Optional<UUID>> SUIT_ID =
-			SynchedEntityData.defineId(SentinelWingmanEntity.class, EntityDataSerializers.OPTIONAL_UUID);
+	private static final EntityDataAccessor<String> OWNER_ID =
+			SynchedEntityData.defineId(SentinelWingmanEntity.class, EntityDataSerializers.STRING);
+	private static final EntityDataAccessor<String> SUIT_ID =
+			SynchedEntityData.defineId(SentinelWingmanEntity.class, EntityDataSerializers.STRING);
 	private static final EntityDataAccessor<Integer> SIDE =
 			SynchedEntityData.defineId(SentinelWingmanEntity.class, EntityDataSerializers.INT);
 	private static final EntityDataAccessor<Float> INTEGRITY =
@@ -108,8 +110,8 @@ public final class SentinelWingmanEntity extends Entity {
 	static SentinelWingmanEntity spawn(ServerLevel level, ServerPlayer owner, UUID suitId, int side) {
 		SentinelWingmanEntity wingman =
 				new SentinelWingmanEntity(ModCombatEntities.SENTINEL_WINGMAN, level);
-		wingman.entityData.set(OWNER_ID, Optional.of(owner.getUUID()));
-		wingman.entityData.set(SUIT_ID, Optional.of(suitId));
+		wingman.entityData.set(OWNER_ID, owner.getUUID().toString());
+		wingman.entityData.set(SUIT_ID, suitId.toString());
 		wingman.entityData.set(SIDE, normalizeSide(side));
 		wingman.entityData.set(INTEGRITY, MAXIMUM_INTEGRITY);
 		wingman.entityData.set(DEPLOYMENT_PHASE, PHASE_DEPLOYING);
@@ -129,8 +131,8 @@ public final class SentinelWingmanEntity extends Entity {
 
 	@Override
 	protected void defineSynchedData(SynchedEntityData.Builder builder) {
-		builder.define(OWNER_ID, Optional.empty());
-		builder.define(SUIT_ID, Optional.empty());
+		builder.define(OWNER_ID, "");
+		builder.define(SUIT_ID, "");
 		builder.define(SIDE, SentinelWingmanController.LEFT_SIDE);
 		builder.define(INTEGRITY, MAXIMUM_INTEGRITY);
 		builder.define(SHOT_SEQUENCE, 0);
@@ -143,7 +145,7 @@ public final class SentinelWingmanEntity extends Entity {
 		super.tick();
 		setNoGravity(true);
 		noPhysics = true;
-		if (level().isClientSide) {
+		if (level().isClientSide()) {
 			tickClientVisualState();
 			return;
 		}
@@ -471,9 +473,9 @@ public final class SentinelWingmanEntity extends Entity {
 
 		Vec3 origin = position().add(0.0D, 0.04D, 0.0D);
 		Vec3 endpoint = target.getBoundingBox().getCenter();
-		boolean hurt = target.hurt(ModDamageTypes.coreBeam(owner, this), SHOT_DAMAGE);
+		boolean hurt = target.hurtOrSimulate(ModDamageTypes.coreBeam(owner, this), SHOT_DAMAGE);
 		if (hurt) {
-			target.knockback(0.18D, origin.x - target.getX(), origin.z - target.getZ());
+			target.knockback(0.18D, origin.x - target.getX(), origin.z - target.getZ(), null, 0.0F);
 		}
 		entityData.set(SHOT_SEQUENCE, entityData.get(SHOT_SEQUENCE) + 1);
 		broadcastShot(level, owner, target, origin, endpoint);
@@ -508,10 +510,10 @@ public final class SentinelWingmanEntity extends Entity {
 		normal = normal.lengthSqr() < 1.0E-8D
 				? new Vec3(0.0D, 1.0D, 0.0D) : normal.normalize().scale(-1.0D);
 		ArmorAttackFxPayload payload = new ArmorAttackFxPayload(
-				getUUID(), level.dimension().location(), getShotSequence(),
+				getUUID(), level.dimension().identifier(), getShotSequence(),
 				0, ArmorAttackType.CRUISE_CORE_BEAM, ArmorVariant.SENTINEL,
 				getSide() < 0, origin, endpoint, normal, ArmorAttackHitKind.ENTITY,
-				target.getId(), 0.58F, isInWaterOrBubble());
+				target.getId(), 0.58F, isInWater());
 		Set<ServerPlayer> recipients = new HashSet<>(PlayerLookup.tracking(this));
 		recipients.add(owner);
 		for (ServerPlayer recipient : recipients) {
@@ -523,29 +525,33 @@ public final class SentinelWingmanEntity extends Entity {
 	}
 
 	@Override
-	public boolean hurt(DamageSource source, float amount) {
-		if (level().isClientSide || isRemoved() || amount <= 0.0F) return false;
+	public boolean hurtServer(ServerLevel serverLevel, DamageSource source, float amount) {
+		if (isRemoved() || amount <= 0.0F) return false;
 		Entity attacker = source.getEntity();
 		UUID ownerId = getOwnerId();
 		if (attacker != null && ownerId != null) {
 			if (ownerId.equals(attacker.getUUID())) return false;
-			ServerPlayer owner = level().getServer().getPlayerList().getPlayer(ownerId);
+			ServerPlayer owner = serverLevel.getServer().getPlayerList().getPlayer(ownerId);
 			if (owner != null && owner.isAlliedTo(attacker)) return false;
 			if (owner != null && attacker instanceof LivingEntity
 					&& CombatTargetPolicy.canDamage(owner, attacker)) {
 				retaliationTargetId = attacker.getUUID();
-				nextAttackTick = Math.min(nextAttackTick, level().getGameTime() + 2L);
+				nextAttackTick = Math.min(nextAttackTick, serverLevel.getGameTime() + 2L);
 			}
 		}
 		float effective = source.is(DamageTypeTags.IS_EXPLOSION) ? amount * 0.45F : amount;
 		setIntegrity(getIntegrity() - Math.max(0.5F, effective));
 		markHurt();
 		if (getIntegrity() <= 0.0F) {
-			long now = level() instanceof ServerLevel serverLevel
-					? serverLevel.getGameTime() : 0L;
-			SentinelWingmanController.markDestroyed(this, now);
+			SentinelWingmanController.markDestroyed(this, serverLevel.getGameTime());
 			discard();
 		}
+		return true;
+	}
+
+	@Override
+	public boolean hurtClient(DamageSource source) {
+		markHurt();
 		return true;
 	}
 
@@ -575,39 +581,35 @@ public final class SentinelWingmanEntity extends Entity {
 	}
 
 	@Override
-	protected void addAdditionalSaveData(CompoundTag tag) {
+	protected void addAdditionalSaveData(ValueOutput output) {
 		UUID ownerId = getOwnerId();
 		UUID suitId = getSuitId();
-		if (ownerId != null) tag.putUUID("FlightArmorOwner", ownerId);
-		if (suitId != null) tag.putUUID("FlightArmorSuit", suitId);
-		tag.putInt("FlightArmorSide", getSide());
-		tag.putFloat("FlightArmorIntegrity", getIntegrity());
-		tag.putInt("FlightArmorShotSequence", getShotSequence());
-		tag.putLong("FlightArmorNextAttack", nextAttackTick);
+		if (ownerId != null) output.store("FlightArmorOwner", UUIDUtil.CODEC, ownerId);
+		if (suitId != null) output.store("FlightArmorSuit", UUIDUtil.CODEC, suitId);
+		output.putInt("FlightArmorSide", getSide());
+		output.putFloat("FlightArmorIntegrity", getIntegrity());
+		output.putInt("FlightArmorShotSequence", getShotSequence());
+		output.putLong("FlightArmorNextAttack", nextAttackTick);
 		if (retaliationTargetId != null) {
-			tag.putUUID("FlightArmorRetaliationTarget", retaliationTargetId);
+			output.store("FlightArmorRetaliationTarget", UUIDUtil.CODEC, retaliationTargetId);
 		}
-		tag.putInt("FlightArmorDeploymentPhase", getDeploymentPhase());
-		tag.putLong("FlightArmorPhaseStart", getPhaseStartTick());
+		output.putInt("FlightArmorDeploymentPhase", getDeploymentPhase());
+		output.putLong("FlightArmorPhaseStart", getPhaseStartTick());
 	}
 
 	@Override
-	protected void readAdditionalSaveData(CompoundTag tag) {
-		entityData.set(OWNER_ID, tag.hasUUID("FlightArmorOwner")
-				? Optional.of(tag.getUUID("FlightArmorOwner")) : Optional.empty());
-		entityData.set(SUIT_ID, tag.hasUUID("FlightArmorSuit")
-				? Optional.of(tag.getUUID("FlightArmorSuit")) : Optional.empty());
-		entityData.set(SIDE, normalizeSide(tag.getInt("FlightArmorSide")));
-		entityData.set(INTEGRITY, tag.contains("FlightArmorIntegrity")
-				? Mth.clamp(tag.getFloat("FlightArmorIntegrity"), 0.5F, MAXIMUM_INTEGRITY)
-				: MAXIMUM_INTEGRITY);
-		entityData.set(SHOT_SEQUENCE, Math.max(0, tag.getInt("FlightArmorShotSequence")));
-		nextAttackTick = Math.max(0L, tag.getLong("FlightArmorNextAttack"));
-		retaliationTargetId = tag.hasUUID("FlightArmorRetaliationTarget")
-				? tag.getUUID("FlightArmorRetaliationTarget") : null;
+	protected void readAdditionalSaveData(ValueInput input) {
+		entityData.set(OWNER_ID, input.read("FlightArmorOwner", UUIDUtil.CODEC).map(UUID::toString).orElse(""));
+		entityData.set(SUIT_ID, input.read("FlightArmorSuit", UUIDUtil.CODEC).map(UUID::toString).orElse(""));
+		entityData.set(SIDE, normalizeSide(input.getIntOr("FlightArmorSide", 0)));
+		entityData.set(INTEGRITY, Mth.clamp(
+				input.getFloatOr("FlightArmorIntegrity", MAXIMUM_INTEGRITY), 0.5F, MAXIMUM_INTEGRITY));
+		entityData.set(SHOT_SEQUENCE, Math.max(0, input.getIntOr("FlightArmorShotSequence", 0)));
+		nextAttackTick = Math.max(0L, input.getLongOr("FlightArmorNextAttack", 0L));
+		retaliationTargetId = input.read("FlightArmorRetaliationTarget", UUIDUtil.CODEC).orElse(null);
 		entityData.set(DEPLOYMENT_PHASE, Mth.clamp(
-				tag.getInt("FlightArmorDeploymentPhase"), PHASE_DEPLOYING, PHASE_RETURNING));
-		setPhaseStartTick(Math.max(0L, tag.getLong("FlightArmorPhaseStart")));
+				input.getIntOr("FlightArmorDeploymentPhase", PHASE_DEPLOYING), PHASE_DEPLOYING, PHASE_RETURNING));
+		setPhaseStartTick(Math.max(0L, input.getLongOr("FlightArmorPhaseStart", 0L)));
 		SentinelWingmanController.track(this);
 	}
 
@@ -622,11 +624,13 @@ public final class SentinelWingmanEntity extends Entity {
 	}
 
 	public UUID getOwnerId() {
-		return entityData.get(OWNER_ID).orElse(null);
+		String s = entityData.get(OWNER_ID);
+		return s.isEmpty() ? null : UUID.fromString(s);
 	}
 
 	public UUID getSuitId() {
-		return entityData.get(SUIT_ID).orElse(null);
+		String s = entityData.get(SUIT_ID);
+		return s.isEmpty() ? null : UUID.fromString(s);
 	}
 
 	public int getSide() {

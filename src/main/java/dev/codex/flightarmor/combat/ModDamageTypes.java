@@ -53,8 +53,8 @@ final class ModDamageTypes {
 
 	static DamageSource armorMissile(ServerPlayer attacker, ArmorHomingMissileEntity missile) {
 		Optional<Holder.Reference<DamageType>> holder = attacker.registryAccess()
-				.registryOrThrow(Registries.DAMAGE_TYPE)
-				.getHolder(ARMOR_MISSILE);
+				.lookupOrThrow(Registries.DAMAGE_TYPE)
+				.get(ARMOR_MISSILE);
 		if (holder.isPresent()) {
 			// DamageSource constructor order is direct entity, then causing entity.
 			return new DamageSource(holder.get(), missile, attacker);
@@ -69,8 +69,8 @@ final class ModDamageTypes {
 			ResourceKey<DamageType> key, String path) {
 		Entity direct = directSource == null ? attacker : directSource;
 		Optional<Holder.Reference<DamageType>> holder = attacker.registryAccess()
-				.registryOrThrow(Registries.DAMAGE_TYPE)
-				.getHolder(key);
+				.lookupOrThrow(Registries.DAMAGE_TYPE)
+				.get(key);
 		if (holder.isPresent()) {
 			return new DamageSource(holder.get(), direct, attacker);
 		}
@@ -83,8 +83,8 @@ final class ModDamageTypes {
 	private static DamageSource source(ServerPlayer attacker,
 			ResourceKey<DamageType> key, String path) {
 		Optional<Holder.Reference<DamageType>> holder = attacker.registryAccess()
-				.registryOrThrow(Registries.DAMAGE_TYPE)
-				.getHolder(key);
+				.lookupOrThrow(Registries.DAMAGE_TYPE)
+				.get(key);
 		if (holder.isPresent()) {
 			// hitscan 没有弹丸实体，direct 与 causing entity 都归属发射玩家。
 			return new DamageSource(holder.get(), attacker, attacker);

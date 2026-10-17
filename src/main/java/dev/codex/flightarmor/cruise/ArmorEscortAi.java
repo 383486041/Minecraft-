@@ -38,7 +38,7 @@ final class ArmorEscortAi {
 		double range = sanitizeRange(configuredRange);
 		AABB area = new AABB(commandAnchor, commandAnchor).inflate(range);
 		double rangeSqr = range * range;
-		return owner.serverLevel().getEntitiesOfClass(LivingEntity.class, area, candidate ->
+		return owner.level().getEntitiesOfClass(LivingEntity.class, area, candidate ->
 				isEligible(owner, carrier, candidate, commandAnchor, rangeSqr, includeNonHostile))
 				.stream()
 				.min(Comparator.<LivingEntity>comparingDouble(candidate ->
@@ -57,7 +57,7 @@ final class ArmorEscortAi {
 		double rangeSqr = range * range;
 		AABB area = new AABB(commandAnchor, commandAnchor).inflate(range);
 		List<LivingEntity> candidates = new ArrayList<>(
-				owner.serverLevel().getEntitiesOfClass(LivingEntity.class, area, candidate ->
+				owner.level().getEntitiesOfClass(LivingEntity.class, area, candidate ->
 						isEligible(owner, carrier, candidate, commandAnchor,
 								rangeSqr, includeNonHostile)));
 		candidates.sort(Comparator

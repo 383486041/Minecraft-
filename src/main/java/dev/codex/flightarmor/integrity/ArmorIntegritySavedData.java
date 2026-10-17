@@ -1,12 +1,13 @@
 package dev.codex.flightarmor.integrity;
 
-import net.minecraft.core.HolderLookup;
+import dev.codex.flightarmor.FlightArmorMod;
+import dev.codex.flightarmor.util.TagUtils;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -17,12 +18,15 @@ import java.util.UUID;
 public final class ArmorIntegritySavedData extends SavedData {
 	private static final String DATA_NAME = "flight_armor_integrity";
 	private static final int VERSION = 1;
-	private static final SavedData.Factory<ArmorIntegritySavedData> FACTORY = new SavedData.Factory<>(
-			ArmorIntegritySavedData::new, ArmorIntegritySavedData::load, DataFixTypes.LEVEL);
+	private static final SavedDataType<ArmorIntegritySavedData> TYPE = new SavedDataType<>(
+			FlightArmorMod.id(DATA_NAME),
+			ArmorIntegritySavedData::new,
+			CompoundTag.CODEC.xmap(ArmorIntegritySavedData::load, data -> data.save(new CompoundTag())),
+			DataFixTypes.LEVEL);
 	private final Map<SuitKey, Record> records = new HashMap<>();
 
 	public static ArmorIntegritySavedData get(MinecraftServer server) {
-		return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+		return server.overworld().getDataStorage().computeIfAbsent(TYPE);
 	}
 
 	public Snapshot snapshot(UUID ownerId, UUID suitId) {
@@ -58,13 +62,13 @@ public final class ArmorIntegritySavedData extends SavedData {
 		return new Mutation(oldValue, nextValue, true);
 	}
 
-	static ArmorIntegritySavedData load(CompoundTag root, HolderLookup.Provider registries) {
+	static ArmorIntegritySavedData load(CompoundTag root) {
 		ArmorIntegritySavedData data = new ArmorIntegritySavedData();
-		if (root.getInt("Version") != VERSION) data.setDirty();
-		ListTag list = root.getList("Suits", Tag.TAG_COMPOUND);
+		if (root.getIntOr("Version", 0) != VERSION) data.setDirty();
+		ListTag list = root.getListOrEmpty("Suits");
 		for (int index = 0; index < list.size(); index++) {
 			try {
-				Record candidate = readRecord(list.getCompound(index));
+				Record candidate = readRecord(list.getCompoundOrEmpty(index));
 				Record current = data.records.get(candidate.key());
 				if (current == null || candidate.revision() > current.revision()
 						|| candidate.revision() == current.revision()
@@ -76,8 +80,7 @@ public final class ArmorIntegritySavedData extends SavedData {
 		return data;
 	}
 
-	@Override
-	public CompoundTag save(CompoundTag root, HolderLookup.Provider registries) {
+	public CompoundTag save(CompoundTag root) {
 		root.putInt("Version", VERSION);
 		ListTag list = new ListTag();
 		for (Record record : records.values()) list.add(writeRecord(record));
@@ -88,25 +91,25 @@ public final class ArmorIntegritySavedData extends SavedData {
 	static CompoundTag writeRecord(Record record) {
 		CompoundTag tag = new CompoundTag();
 		tag.putInt("Version", VERSION);
-		tag.putUUID("Owner", record.key().ownerId());
-		tag.putUUID("Suit", record.key().suitId());
+		TagUtils.putUUID(tag, "Owner", record.key().ownerId());
+		TagUtils.putUUID(tag, "Suit", record.key().suitId());
 		tag.putInt("Integrity", ArmorIntegrityRules.clamp(record.integrity()));
 		tag.putLong("Revision", Math.max(1L, record.revision()));
-		if (record.lastDirectAttackerId() != null) tag.putUUID("LastDirect", record.lastDirectAttackerId());
-		if (record.lastCausingAttackerId() != null) tag.putUUID("LastCausing", record.lastCausingAttackerId());
+		if (record.lastDirectAttackerId() != null) TagUtils.putUUID(tag, "LastDirect", record.lastDirectAttackerId());
+		if (record.lastCausingAttackerId() != null) TagUtils.putUUID(tag, "LastCausing", record.lastCausingAttackerId());
 		tag.putLong("UpdatedAt", Math.max(0L, record.updatedAt()));
 		return tag;
 	}
 
 	static Record readRecord(CompoundTag tag) {
-		UUID owner = tag.getUUID("Owner");
-		UUID suit = tag.getUUID("Suit");
-		UUID direct = tag.hasUUID("LastDirect") ? tag.getUUID("LastDirect") : null;
-		UUID causing = tag.hasUUID("LastCausing") ? tag.getUUID("LastCausing") : null;
+		UUID owner = TagUtils.getUUID(tag, "Owner");
+		UUID suit = TagUtils.getUUID(tag, "Suit");
+		UUID direct = TagUtils.hasUUID(tag, "LastDirect") ? TagUtils.getUUID(tag, "LastDirect") : null;
+		UUID causing = TagUtils.hasUUID(tag, "LastCausing") ? TagUtils.getUUID(tag, "LastCausing") : null;
 		SuitKey key = new SuitKey(owner, suit);
-		return new Record(key, ArmorIntegrityRules.clamp(tag.getInt("Integrity")),
-				Math.max(1L, tag.getLong("Revision")), direct, causing,
-				Math.max(0L, tag.getLong("UpdatedAt")));
+		return new Record(key, ArmorIntegrityRules.clamp(tag.getIntOr("Integrity", 0)),
+				Math.max(1L, tag.getLongOr("Revision", 1L)), direct, causing,
+				Math.max(0L, tag.getLongOr("UpdatedAt", 0L)));
 	}
 
 	public record SuitKey(UUID ownerId, UUID suitId) {

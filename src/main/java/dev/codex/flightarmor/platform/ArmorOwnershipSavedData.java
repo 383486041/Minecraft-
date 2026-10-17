@@ -1,17 +1,20 @@
 package dev.codex.flightarmor.platform;
 
+import dev.codex.flightarmor.FlightArmorMod;
+import dev.codex.flightarmor.util.TagUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -30,15 +33,16 @@ import java.util.UUID;
  */
 final class ArmorOwnershipSavedData extends SavedData {
 	private static final String DATA_NAME = "flight_armor_ownership";
-	private static final SavedData.Factory<ArmorOwnershipSavedData> FACTORY = new SavedData.Factory<>(
+	static final SavedDataType<ArmorOwnershipSavedData> TYPE = new SavedDataType<>(
+			FlightArmorMod.id(DATA_NAME),
 			ArmorOwnershipSavedData::new,
-			ArmorOwnershipSavedData::load,
-			DataFixTypes.LEVEL);
+			CompoundTag.CODEC.xmap(ArmorOwnershipSavedData::load, data -> data.save(new CompoundTag())),
+			DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
 
 	private final Map<UUID, Binding> bindingsBySuit = new HashMap<>();
 
 	static ArmorOwnershipSavedData get(MinecraftServer server) {
-		return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+		return server.overworld().getDataStorage().computeIfAbsent(TYPE);
 	}
 
 	/** 兼容单套调用：优先当前穿戴，其次最近更新的平台套装。 */
@@ -258,25 +262,25 @@ final class ArmorOwnershipSavedData extends SavedData {
 		return true;
 	}
 
-	private static ArmorOwnershipSavedData load(CompoundTag root, HolderLookup.Provider registries) {
+	private static ArmorOwnershipSavedData load(CompoundTag root) {
 		ArmorOwnershipSavedData data = new ArmorOwnershipSavedData();
-		ListTag list = root.getList("Bindings", Tag.TAG_COMPOUND);
+		ListTag list = root.getListOrEmpty("Bindings");
 		for (int index = 0; index < list.size(); index++) {
-			CompoundTag tag = list.getCompound(index);
+			CompoundTag tag = list.getCompoundOrEmpty(index);
 			try {
-				UUID ownerId = tag.getUUID("Owner");
-				UUID suitId = tag.getUUID("Suit");
-				Location location = Location.valueOf(tag.getString("Location"));
+				UUID ownerId = TagUtils.getUUID(tag, "Owner");
+				UUID suitId = TagUtils.getUUID(tag, "Suit");
+				Location location = Location.valueOf(tag.getStringOr("Location", ""));
 				ResourceKey<Level> dimension = null;
 				BlockPos pos = null;
-				if (tag.contains("Dimension", Tag.TAG_STRING)) {
+				if (tag.contains("Dimension")) {
 					dimension = ResourceKey.create(Registries.DIMENSION,
-							ResourceLocation.parse(tag.getString("Dimension")));
+							Identifier.parse(tag.getStringOr("Dimension", "")));
 				}
-				if (tag.contains("X", Tag.TAG_INT)) {
-					pos = new BlockPos(tag.getInt("X"), tag.getInt("Y"), tag.getInt("Z"));
+				if (tag.contains("X")) {
+					pos = new BlockPos(tag.getIntOr("X", 0), tag.getIntOr("Y", 0), tag.getIntOr("Z", 0));
 				}
-				Binding binding = new Binding(ownerId, suitId, location, dimension, pos, tag.getLong("Revision"));
+				Binding binding = new Binding(ownerId, suitId, location, dimension, pos, tag.getLongOr("Revision", 0L));
 				Binding older = data.bindingsBySuit.get(suitId);
 				if (older == null || binding.revision() >= older.revision()) {
 					data.bindingsBySuit.put(suitId, binding);
@@ -288,16 +292,15 @@ final class ArmorOwnershipSavedData extends SavedData {
 		return data;
 	}
 
-	@Override
-	public CompoundTag save(CompoundTag root, HolderLookup.Provider registries) {
+	public CompoundTag save(CompoundTag root) {
 		ListTag list = new ListTag();
 		for (Binding binding : bindingsBySuit.values()) {
 			CompoundTag tag = new CompoundTag();
-			tag.putUUID("Owner", binding.ownerId());
-			tag.putUUID("Suit", binding.suitId());
+			TagUtils.putUUID(tag, "Owner", binding.ownerId());
+			TagUtils.putUUID(tag, "Suit", binding.suitId());
 			tag.putString("Location", binding.location().name());
 			tag.putLong("Revision", binding.revision());
-			if (binding.dimension() != null) tag.putString("Dimension", binding.dimension().location().toString());
+			if (binding.dimension() != null) tag.putString("Dimension", binding.dimension().identifier().toString());
 			if (binding.pos() != null) {
 				tag.putInt("X", binding.pos().getX());
 				tag.putInt("Y", binding.pos().getY());

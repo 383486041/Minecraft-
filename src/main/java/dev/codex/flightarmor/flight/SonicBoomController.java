@@ -31,7 +31,7 @@ final class SonicBoomController {
 		if (player == null) return;
 		SonicBoomLatch latch = LATCHES.computeIfAbsent(
 				player.getUUID(), ignored -> new SonicBoomLatch());
-		if (player.isInWaterOrBubble()) {
+		if (player.isInWater()) {
 			latch.reset();
 			return;
 		}
@@ -48,34 +48,33 @@ final class SonicBoomController {
 				.subtract(direction.scale(1.15D));
 
 		boolean alreadyInvulnerable = player.isInvulnerable();
-		if (!alreadyInvulnerable) player.setInvulnerable(true);
+		if (!alreadyInvulnerable) player.setPermanentlyInvulnerable(true);
 		try {
-			ArmorExplosionEffects.explodeWithSonicReport(player.serverLevel(), player,
+			ArmorExplosionEffects.explodeWithSonicReport(player.level(), player,
 					center, EXPLOSION_POWER, false, Level.ExplosionInteraction.NONE);
 			// 原生爆炸保持 NONE（不做无差别炸地形）；掠过破土另走一套带完整护栏、按马赫给预算的破坏。
 			ImpactBlastController.shockwave(player, center, mach);
 		} finally {
-			if (!alreadyInvulnerable) player.setInvulnerable(false);
+			if (!alreadyInvulnerable) player.setPermanentlyInvulnerable(false);
 		}
 		broadcastVisualEvent(player, center, direction, (float) mach);
 		// The native explosion owns the external boom. This extra cue is listener-only
 		// armor conduction, not a second spatial explosion broadcast.
-		player.playNotifySound(ModSoundEvents.FLIGHT_SONIC_INTERNAL,
-				SoundSource.PLAYERS, 0.66F, 0.96F);
+		player.playSound(ModSoundEvents.FLIGHT_SONIC_INTERNAL, 0.66F, 0.96F);
 	}
 
 	private static void broadcastVisualEvent(ServerPlayer player, Vec3 center,
 			Vec3 direction, float mach) {
 		SonicBoomFxPayload payload = new SonicBoomFxPayload(
 				player.getUUID(),
-				player.level().dimension().location(),
+				player.level().dimension().identifier(),
 				NEXT_EVENT_ID.incrementAndGet(),
 				center,
 				direction,
 				mach);
 		Set<ServerPlayer> recipients = new HashSet<>(PlayerLookup.tracking(player));
 		recipients.add(player);
-		recipients.addAll(PlayerLookup.around(player.serverLevel(), center,
+		recipients.addAll(PlayerLookup.around(player.level(), center,
 				SonicBoomVisualProfile.MAX_RENDER_DISTANCE_BLOCKS));
 		for (ServerPlayer recipient : recipients) {
 			if (ServerPlayNetworking.canSend(recipient, SonicBoomFxPayload.TYPE)) {

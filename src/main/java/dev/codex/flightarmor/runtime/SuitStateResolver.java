@@ -86,7 +86,7 @@ public final class SuitStateResolver {
 
 		boolean escort = ArmorEscortController.isLoadedActive(suitId);
 		boolean escortRecoverable =
-				ArmorEscortController.hasRecoverableSuit(player.getServer(), suitId);
+				ArmorEscortController.hasRecoverableSuit(player.level().getServer(), suitId);
 		boolean cruiseLocatorMatches = cruise != null && suitId.equals(cruise.suitId());
 		// A persisted CRUISE ledger/locator is recovery evidence, not proof that a usable carrier
 		// currently exists. Only the exact, loaded carrier may authorize carrier commands.

@@ -1,21 +1,30 @@
 package dev.codex.flightarmor.core;
 
+import dev.codex.flightarmor.FlightArmorMod;
+import dev.codex.flightarmor.util.TagUtils;
 import dev.codex.flightarmor.variant.ArmorVariant;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
+import net.minecraft.world.level.storage.TagValueInput;
+import net.minecraft.world.level.storage.TagValueOutput;
+import net.minecraft.world.level.storage.ValueInput;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -30,13 +39,17 @@ import java.util.UUID;
 final class ArmorCoreSavedData extends SavedData {
 	static final int MAX_BINDINGS_PER_CORE = 8;
 	private static final String DATA_NAME = "flight_armor_core_network";
-	private static final SavedData.Factory<ArmorCoreSavedData> FACTORY = new SavedData.Factory<>(
-			ArmorCoreSavedData::new, ArmorCoreSavedData::load, DataFixTypes.LEVEL);
+	private static final HolderLookup.Provider DEFAULT_LOOKUP = RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY);
+	static final SavedDataType<ArmorCoreSavedData> TYPE = new SavedDataType<>(
+			FlightArmorMod.id(DATA_NAME),
+			ArmorCoreSavedData::new,
+			CompoundTag.CODEC.xmap(ArmorCoreSavedData::load, data -> data.save(new CompoundTag())),
+			DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
 	private final Map<UUID, CoreRecord> records = new LinkedHashMap<>();
 	private final Map<UUID, QuickSwitchRecord> quickSwitches = new LinkedHashMap<>();
 
 	static ArmorCoreSavedData get(MinecraftServer server) {
-		return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+		return server.overworld().getDataStorage().computeIfAbsent(TYPE);
 	}
 
 	CoreRecord record(UUID ownerId) {
@@ -327,54 +340,53 @@ final class ArmorCoreSavedData extends SavedData {
 	}
 
 
-	private static ArmorCoreSavedData load(CompoundTag root, HolderLookup.Provider registries) {
+	private static ArmorCoreSavedData load(CompoundTag root) {
 		ArmorCoreSavedData data = new ArmorCoreSavedData();
-		int loadedFormat = root.contains("FormatVersion", Tag.TAG_INT) ? root.getInt("FormatVersion") : 0;
-		ListTag players = root.getList("Players", Tag.TAG_COMPOUND);
+		int loadedFormat = root.getIntOr("FormatVersion", 0);
+		ListTag players = root.getListOrEmpty("Players");
 		for (int index = 0; index < players.size(); index++) {
-			CompoundTag tag = players.getCompound(index);
+			CompoundTag tag = players.getCompoundOrEmpty(index);
 			try {
-				UUID ownerId = tag.getUUID("Owner");
+				UUID ownerId = TagUtils.getUUID(tag, "Owner");
 				CoreRecord record = new CoreRecord(ownerId);
 				NonNullList<ItemStack> coreItems = NonNullList.withSize(1, ItemStack.EMPTY);
-				ContainerHelper.loadAllItems(tag.getCompound("CoreInventory"), coreItems, registries);
+				ValueInput input = TagValueInput.create(ProblemReporter.DISCARDING, DEFAULT_LOOKUP, tag.getCompoundOrEmpty("CoreInventory"));
+				ContainerHelper.loadAllItems(input, coreItems);
 				ItemStack loadedCore = coreItems.getFirst();
 				record.core = loadedCore.isEmpty() ? ItemStack.EMPTY : loadedCore.copyWithCount(1);
 				Optional<ArmorCoreIdentity.Identity> storedIdentity = ArmorCoreIdentity.read(record.core);
-				record.networkCoreId = tag.hasUUID("NetworkCore") ? tag.getUUID("NetworkCore")
+				record.networkCoreId = TagUtils.hasUUID(tag, "NetworkCore") ? TagUtils.getUUID(tag, "NetworkCore")
 						: storedIdentity.map(ArmorCoreIdentity.Identity::coreId).orElse(null);
-				record.networkNonce = tag.hasUUID("NetworkNonce") ? tag.getUUID("NetworkNonce")
+				record.networkNonce = TagUtils.hasUUID(tag, "NetworkNonce") ? TagUtils.getUUID(tag, "NetworkNonce")
 						: storedIdentity.map(ArmorCoreIdentity.Identity::instanceNonce).orElse(null);
-				if (tag.hasUUID("PrimarySuit")) record.primarySuitId = tag.getUUID("PrimarySuit");
+				if (TagUtils.hasUUID(tag, "PrimarySuit")) record.primarySuitId = TagUtils.getUUID(tag, "PrimarySuit");
 				readLinkedSuits(tag, record.linkedSuitIds);
-				ListTag bindings = tag.getList("Bindings", Tag.TAG_COMPOUND);
+				ListTag bindings = tag.getListOrEmpty("Bindings");
 				for (int bindingIndex = 0; bindingIndex < bindings.size(); bindingIndex++) {
 					try {
-						CompoundTag bindingTag = bindings.getCompound(bindingIndex);
-						UUID suitId = bindingTag.getUUID("Suit");
-						UUID platformId = bindingTag.getUUID("Platform");
+						CompoundTag bindingTag = bindings.getCompoundOrEmpty(bindingIndex);
+						UUID suitId = TagUtils.getUUID(bindingTag, "Suit");
+						UUID platformId = TagUtils.getUUID(bindingTag, "Platform");
 						ResourceKey<Level> dimension = ResourceKey.create(Registries.DIMENSION,
-								ResourceLocation.parse(bindingTag.getString("Dimension")));
-						BlockPos pos = new BlockPos(bindingTag.getInt("X"), bindingTag.getInt("Y"), bindingTag.getInt("Z"));
-						ArmorVariant variant = ArmorVariant.fromSerializedName(bindingTag.getString("Variant"));
-						String name = bindingTag.getString("Name");
+								Identifier.parse(bindingTag.getStringOr("Dimension", "")));
+						BlockPos pos = new BlockPos(bindingTag.getIntOr("X", 0), bindingTag.getIntOr("Y", 0), bindingTag.getIntOr("Z", 0));
+						ArmorVariant variant = ArmorVariant.fromSerializedName(bindingTag.getStringOr("Variant", ""));
+						String name = bindingTag.getStringOr("Name", "");
 						record.bindings.put(suitId, new PlatformBinding(suitId, platformId, dimension, pos,
 								variant, name.isBlank() ? defaultName(variant, suitId) : name));
 						record.linkedSuitIds.add(suitId);
 						ArmorEscortProfile.CombatPolicy attackMode =
-								ArmorEscortProfile.CombatPolicy.fromName(bindingTag.getString("CombatPolicy"));
-						int attackRange = bindingTag.contains("AttackRange", Tag.TAG_INT)
-								? bindingTag.getInt("AttackRange") : 32;
+								ArmorEscortProfile.CombatPolicy.fromName(bindingTag.getStringOr("CombatPolicy", ""));
+						int attackRange = bindingTag.getIntOr("AttackRange", 32);
 						ArmorEscortProfile.EscortAnchor stance =
-								ArmorEscortProfile.EscortAnchor.fromName(bindingTag.getString("EscortAnchor"));
+								ArmorEscortProfile.EscortAnchor.fromName(bindingTag.getStringOr("EscortAnchor", ""));
 						ResourceKey<Level> holdDimension = null;
 						BlockPos holdPosition = null;
-						if (bindingTag.contains("HoldDimension", Tag.TAG_STRING)
-								&& bindingTag.contains("HoldX", Tag.TAG_INT)) {
+						if (bindingTag.contains("HoldDimension") && bindingTag.contains("HoldX")) {
 							holdDimension = ResourceKey.create(Registries.DIMENSION,
-									ResourceLocation.parse(bindingTag.getString("HoldDimension")));
-							holdPosition = new BlockPos(bindingTag.getInt("HoldX"),
-									bindingTag.getInt("HoldY"), bindingTag.getInt("HoldZ"));
+									Identifier.parse(bindingTag.getStringOr("HoldDimension", "")));
+							holdPosition = new BlockPos(bindingTag.getIntOr("HoldX", 0),
+									bindingTag.getIntOr("HoldY", 0), bindingTag.getIntOr("HoldZ", 0));
 						}
 						record.escortProfiles.put(suitId, new ArmorEscortProfile(
 								attackMode, attackRange, stance, holdDimension, holdPosition));
@@ -386,12 +398,12 @@ final class ArmorCoreSavedData extends SavedData {
 				readEscortProfiles(tag, record.linkedSuitIds, record.escortProfiles);
 				NetworkRecord legacyNetwork = new NetworkRecord(
 						record.primarySuitId, record.linkedSuitIds, record.bindings, record.escortProfiles);
-				ListTag networkTags = tag.getList("Networks", Tag.TAG_COMPOUND);
+				ListTag networkTags = tag.getListOrEmpty("Networks");
 				for (int networkIndex = 0; networkIndex < networkTags.size(); networkIndex++) {
 					try {
-						CompoundTag networkTag = networkTags.getCompound(networkIndex);
-						if (!networkTag.hasUUID("Core") || !networkTag.hasUUID("Nonce")) continue;
-						NetworkKey key = new NetworkKey(networkTag.getUUID("Core"), networkTag.getUUID("Nonce"));
+						CompoundTag networkTag = networkTags.getCompoundOrEmpty(networkIndex);
+						if (!TagUtils.hasUUID(networkTag, "Core") || !TagUtils.hasUUID(networkTag, "Nonce")) continue;
+						NetworkKey key = new NetworkKey(TagUtils.getUUID(networkTag, "Core"), TagUtils.getUUID(networkTag, "Nonce"));
 						record.networks.put(key, readNetwork(networkTag));
 					} catch (RuntimeException ignored) {
 						// A damaged inactive network does not block the owner's other cores.
@@ -404,10 +416,10 @@ final class ArmorCoreSavedData extends SavedData {
 				// 单名玩家记录损坏不会阻止其他核心加载。
 			}
 		}
-		ListTag quickSwitches = root.getList("QuickSwitches", Tag.TAG_COMPOUND);
+		ListTag quickSwitches = root.getListOrEmpty("QuickSwitches");
 		for (int index = 0; index < quickSwitches.size(); index++) {
 			try {
-				QuickSwitchRecord transaction = readQuickSwitch(quickSwitches.getCompound(index));
+				QuickSwitchRecord transaction = readQuickSwitch(quickSwitches.getCompoundOrEmpty(index));
 				data.quickSwitches.put(transaction.ownerId(), transaction);
 			} catch (RuntimeException ignored) {
 				// One corrupt transaction must not prevent core networks or other recoveries from loading.
@@ -417,28 +429,27 @@ final class ArmorCoreSavedData extends SavedData {
 		return data;
 	}
 
-	@Override
-	public CompoundTag save(CompoundTag root, HolderLookup.Provider registries) {
+	public CompoundTag save(CompoundTag root) {
 		ListTag players = new ListTag();
 		for (CoreRecord record : records.values()) {
 			CompoundTag tag = new CompoundTag();
-			tag.putUUID("Owner", record.ownerId);
+			TagUtils.putUUID(tag, "Owner", record.ownerId);
 			NonNullList<ItemStack> coreItems = NonNullList.withSize(1, ItemStack.EMPTY);
 			coreItems.set(0, record.core.copy());
-			CompoundTag coreTag = new CompoundTag();
-			ContainerHelper.saveAllItems(coreTag, coreItems, true, registries);
-			tag.put("CoreInventory", coreTag);
-			if (record.networkCoreId != null) tag.putUUID("NetworkCore", record.networkCoreId);
-			if (record.networkNonce != null) tag.putUUID("NetworkNonce", record.networkNonce);
-			if (record.primarySuitId != null) tag.putUUID("PrimarySuit", record.primarySuitId);
+			TagValueOutput coreOutput = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, DEFAULT_LOOKUP);
+			ContainerHelper.saveAllItems(coreOutput, coreItems, true);
+			tag.put("CoreInventory", coreOutput.buildResult());
+			if (record.networkCoreId != null) TagUtils.putUUID(tag, "NetworkCore", record.networkCoreId);
+			if (record.networkNonce != null) TagUtils.putUUID(tag, "NetworkNonce", record.networkNonce);
+			if (record.primarySuitId != null) TagUtils.putUUID(tag, "PrimarySuit", record.primarySuitId);
 			tag.put("LinkedSuits", writeLinkedSuits(record.linkedSuitIds));
 			tag.put("EscortProfiles", writeEscortProfiles(record.linkedSuitIds, record.escortProfiles));
 			ListTag bindings = new ListTag();
 			for (PlatformBinding binding : record.bindings.values()) {
 				CompoundTag bindingTag = new CompoundTag();
-				bindingTag.putUUID("Suit", binding.suitId());
-				bindingTag.putUUID("Platform", binding.platformId());
-				bindingTag.putString("Dimension", binding.dimension().location().toString());
+				TagUtils.putUUID(bindingTag, "Suit", binding.suitId());
+				TagUtils.putUUID(bindingTag, "Platform", binding.platformId());
+				bindingTag.putString("Dimension", binding.dimension().identifier().toString());
 				bindingTag.putInt("X", binding.pos().getX());
 				bindingTag.putInt("Y", binding.pos().getY());
 				bindingTag.putInt("Z", binding.pos().getZ());
@@ -449,7 +460,7 @@ final class ArmorCoreSavedData extends SavedData {
 				bindingTag.putInt("AttackRange", profile.rangeBlocks());
 				bindingTag.putString("EscortAnchor", profile.stance().name());
 				if (profile.holdDimension() != null && profile.holdPosition() != null) {
-					bindingTag.putString("HoldDimension", profile.holdDimension().location().toString());
+					bindingTag.putString("HoldDimension", profile.holdDimension().identifier().toString());
 					bindingTag.putInt("HoldX", profile.holdPosition().getX());
 					bindingTag.putInt("HoldY", profile.holdPosition().getY());
 					bindingTag.putInt("HoldZ", profile.holdPosition().getZ());
@@ -479,13 +490,13 @@ final class ArmorCoreSavedData extends SavedData {
 
 	static CompoundTag writeQuickSwitch(QuickSwitchRecord transaction) {
 		CompoundTag tag = new CompoundTag();
-		tag.putUUID("Transaction", transaction.transactionId());
-		tag.putUUID("Owner", transaction.ownerId());
-		tag.putUUID("Core", transaction.coreId());
-		tag.putUUID("CoreNonce", transaction.coreNonce());
-		tag.putUUID("OutgoingSuit", transaction.outgoingSuitId());
+		TagUtils.putUUID(tag, "Transaction", transaction.transactionId());
+		TagUtils.putUUID(tag, "Owner", transaction.ownerId());
+		TagUtils.putUUID(tag, "Core", transaction.coreId());
+		TagUtils.putUUID(tag, "CoreNonce", transaction.coreNonce());
+		TagUtils.putUUID(tag, "OutgoingSuit", transaction.outgoingSuitId());
 		tag.put("OutgoingPlatform", writePlatformBinding(transaction.outgoingBinding()));
-		tag.putUUID("TargetSuit", transaction.targetSuitId());
+		TagUtils.putUUID(tag, "TargetSuit", transaction.targetSuitId());
 		tag.putString("TargetName", transaction.targetName());
 		if (!transaction.targetSource().isBlank()) tag.putString("TargetSource", transaction.targetSource());
 		tag.putString("Phase", transaction.phase());
@@ -503,28 +514,28 @@ final class ArmorCoreSavedData extends SavedData {
 	}
 
 	static QuickSwitchRecord readQuickSwitch(CompoundTag tag) {
-		UUID transactionId = tag.getUUID("Transaction");
-		UUID ownerId = tag.getUUID("Owner");
-		UUID coreId = tag.getUUID("Core");
-		UUID coreNonce = tag.getUUID("CoreNonce");
-		UUID outgoingSuitId = tag.getUUID("OutgoingSuit");
-		PlatformBinding outgoingBinding = readPlatformBinding(tag.getCompound("OutgoingPlatform"));
-		UUID targetSuitId = tag.getUUID("TargetSuit");
+		UUID transactionId = TagUtils.getUUID(tag, "Transaction");
+		UUID ownerId = TagUtils.getUUID(tag, "Owner");
+		UUID coreId = TagUtils.getUUID(tag, "Core");
+		UUID coreNonce = TagUtils.getUUID(tag, "CoreNonce");
+		UUID outgoingSuitId = TagUtils.getUUID(tag, "OutgoingSuit");
+		PlatformBinding outgoingBinding = readPlatformBinding(tag.getCompoundOrEmpty("OutgoingPlatform"));
+		UUID targetSuitId = TagUtils.getUUID(tag, "TargetSuit");
 		return new QuickSwitchRecord(transactionId, ownerId, coreId, coreNonce,
-				outgoingSuitId, outgoingBinding, targetSuitId, tag.getString("TargetName"),
-				tag.getString("TargetSource"), tag.getString("Phase"),
-				tag.getLong("StartGameTime"), tag.getLong("PhaseStartGameTime"),
-				tag.getString("RecoveryCause"), tag.getLong("NextRecoveryAttempt"),
-				tag.getBoolean("OutgoingDeployed"), tag.getBoolean("TargetCancellationComplete"),
-				tag.getBoolean("RecoveryRequestAnnounced"), tag.getBoolean("RecoveryWaitingAnnounced"),
-				tag.getString("LastRecoveryDetail"), Math.max(0L, tag.getLong("Revision")));
+				outgoingSuitId, outgoingBinding, targetSuitId, tag.getStringOr("TargetName", ""),
+				tag.getStringOr("TargetSource", ""), tag.getStringOr("Phase", ""),
+				tag.getLongOr("StartGameTime", 0L), tag.getLongOr("PhaseStartGameTime", 0L),
+				tag.getStringOr("RecoveryCause", ""), tag.getLongOr("NextRecoveryAttempt", 0L),
+				tag.getBooleanOr("OutgoingDeployed", false), tag.getBooleanOr("TargetCancellationComplete", false),
+				tag.getBooleanOr("RecoveryRequestAnnounced", false), tag.getBooleanOr("RecoveryWaitingAnnounced", false),
+				tag.getStringOr("LastRecoveryDetail", ""), Math.max(0L, tag.getLongOr("Revision", 0L)));
 	}
 
 	private static CompoundTag writePlatformBinding(PlatformBinding binding) {
 		CompoundTag tag = new CompoundTag();
-		tag.putUUID("Suit", binding.suitId());
-		tag.putUUID("Platform", binding.platformId());
-		tag.putString("Dimension", binding.dimension().location().toString());
+		TagUtils.putUUID(tag, "Suit", binding.suitId());
+		TagUtils.putUUID(tag, "Platform", binding.platformId());
+		tag.putString("Dimension", binding.dimension().identifier().toString());
 		tag.putInt("X", binding.pos().getX());
 		tag.putInt("Y", binding.pos().getY());
 		tag.putInt("Z", binding.pos().getZ());
@@ -534,51 +545,49 @@ final class ArmorCoreSavedData extends SavedData {
 	}
 
 	private static PlatformBinding readPlatformBinding(CompoundTag tag) {
-		UUID suitId = tag.getUUID("Suit");
-		UUID platformId = tag.getUUID("Platform");
+		UUID suitId = TagUtils.getUUID(tag, "Suit");
+		UUID platformId = TagUtils.getUUID(tag, "Platform");
 		ResourceKey<Level> dimension = ResourceKey.create(Registries.DIMENSION,
-				ResourceLocation.parse(tag.getString("Dimension")));
-		BlockPos pos = new BlockPos(tag.getInt("X"), tag.getInt("Y"), tag.getInt("Z"));
-		ArmorVariant variant = ArmorVariant.fromSerializedName(tag.getString("Variant"));
-		String name = tag.getString("Name");
+				Identifier.parse(tag.getStringOr("Dimension", "")));
+		BlockPos pos = new BlockPos(tag.getIntOr("X", 0), tag.getIntOr("Y", 0), tag.getIntOr("Z", 0));
+		ArmorVariant variant = ArmorVariant.fromSerializedName(tag.getStringOr("Variant", ""));
+		String name = tag.getStringOr("Name", "");
 		return new PlatformBinding(suitId, platformId, dimension, pos, variant,
 				name.isBlank() ? defaultName(variant, suitId) : name);
 	}
 
 	static NetworkRecord readNetwork(CompoundTag tag) {
 		NetworkRecord network = new NetworkRecord();
-		if (tag.hasUUID("PrimarySuit")) network.primarySuitId = tag.getUUID("PrimarySuit");
+		if (TagUtils.hasUUID(tag, "PrimarySuit")) network.primarySuitId = TagUtils.getUUID(tag, "PrimarySuit");
 		readLinkedSuits(tag, network.linkedSuitIds);
-		ListTag bindings = tag.getList("Bindings", Tag.TAG_COMPOUND);
+		ListTag bindings = tag.getListOrEmpty("Bindings");
 		for (int index = 0; index < bindings.size(); index++) {
 			try {
-				CompoundTag bindingTag = bindings.getCompound(index);
-				UUID suitId = bindingTag.getUUID("Suit");
-				UUID platformId = bindingTag.getUUID("Platform");
+				CompoundTag bindingTag = bindings.getCompoundOrEmpty(index);
+				UUID suitId = TagUtils.getUUID(bindingTag, "Suit");
+				UUID platformId = TagUtils.getUUID(bindingTag, "Platform");
 				ResourceKey<Level> dimension = ResourceKey.create(Registries.DIMENSION,
-						ResourceLocation.parse(bindingTag.getString("Dimension")));
-				BlockPos pos = new BlockPos(bindingTag.getInt("X"), bindingTag.getInt("Y"),
-						bindingTag.getInt("Z"));
-				ArmorVariant variant = ArmorVariant.fromSerializedName(bindingTag.getString("Variant"));
-				String name = bindingTag.getString("Name");
+						Identifier.parse(bindingTag.getStringOr("Dimension", "")));
+				BlockPos pos = new BlockPos(bindingTag.getIntOr("X", 0), bindingTag.getIntOr("Y", 0),
+						bindingTag.getIntOr("Z", 0));
+				ArmorVariant variant = ArmorVariant.fromSerializedName(bindingTag.getStringOr("Variant", ""));
+				String name = bindingTag.getStringOr("Name", "");
 				network.bindings.put(suitId, new PlatformBinding(suitId, platformId, dimension, pos,
 						variant, name.isBlank() ? defaultName(variant, suitId) : name));
 				network.linkedSuitIds.add(suitId);
 
 				ArmorEscortProfile.CombatPolicy attackMode =
-						ArmorEscortProfile.CombatPolicy.fromName(bindingTag.getString("CombatPolicy"));
-				int attackRange = bindingTag.contains("AttackRange", Tag.TAG_INT)
-						? bindingTag.getInt("AttackRange") : 32;
+						ArmorEscortProfile.CombatPolicy.fromName(bindingTag.getStringOr("CombatPolicy", ""));
+				int attackRange = bindingTag.getIntOr("AttackRange", 32);
 				ArmorEscortProfile.EscortAnchor stance =
-						ArmorEscortProfile.EscortAnchor.fromName(bindingTag.getString("EscortAnchor"));
+						ArmorEscortProfile.EscortAnchor.fromName(bindingTag.getStringOr("EscortAnchor", ""));
 				ResourceKey<Level> holdDimension = null;
 				BlockPos holdPosition = null;
-				if (bindingTag.contains("HoldDimension", Tag.TAG_STRING)
-						&& bindingTag.contains("HoldX", Tag.TAG_INT)) {
+				if (bindingTag.contains("HoldDimension") && bindingTag.contains("HoldX")) {
 					holdDimension = ResourceKey.create(Registries.DIMENSION,
-							ResourceLocation.parse(bindingTag.getString("HoldDimension")));
-					holdPosition = new BlockPos(bindingTag.getInt("HoldX"),
-							bindingTag.getInt("HoldY"), bindingTag.getInt("HoldZ"));
+							Identifier.parse(bindingTag.getStringOr("HoldDimension", "")));
+					holdPosition = new BlockPos(bindingTag.getIntOr("HoldX", 0),
+							bindingTag.getIntOr("HoldY", 0), bindingTag.getIntOr("HoldZ", 0));
 				}
 				network.escortProfiles.put(suitId, new ArmorEscortProfile(
 						attackMode, attackRange, stance, holdDimension, holdPosition));
@@ -593,9 +602,9 @@ final class ArmorCoreSavedData extends SavedData {
 
 	static CompoundTag writeNetwork(NetworkKey key, NetworkRecord network) {
 		CompoundTag tag = new CompoundTag();
-		tag.putUUID("Core", key.coreId());
-		tag.putUUID("Nonce", key.nonce());
-		if (network.primarySuitId != null) tag.putUUID("PrimarySuit", network.primarySuitId);
+		TagUtils.putUUID(tag, "Core", key.coreId());
+		TagUtils.putUUID(tag, "Nonce", key.nonce());
+		if (network.primarySuitId != null) TagUtils.putUUID(tag, "PrimarySuit", network.primarySuitId);
 		tag.put("LinkedSuits", writeLinkedSuits(network.linkedSuitIds));
 		tag.put("Bindings", writeBindings(network.bindings, network.escortProfiles));
 		tag.put("EscortProfiles", writeEscortProfiles(network.linkedSuitIds, network.escortProfiles));
@@ -609,12 +618,12 @@ final class ArmorCoreSavedData extends SavedData {
 			if (!linkedSuitIds.contains(entry.getKey()) || entry.getValue() == null) continue;
 			ArmorEscortProfile profile = entry.getValue();
 			CompoundTag profileTag = new CompoundTag();
-			profileTag.putUUID("Suit", entry.getKey());
+			TagUtils.putUUID(profileTag, "Suit", entry.getKey());
 			profileTag.putString("CombatPolicy", profile.attackMode().name());
 			profileTag.putInt("AttackRange", profile.rangeBlocks());
 			profileTag.putString("EscortAnchor", profile.stance().name());
 			if (profile.holdDimension() != null && profile.holdPosition() != null) {
-				profileTag.putString("HoldDimension", profile.holdDimension().location().toString());
+				profileTag.putString("HoldDimension", profile.holdDimension().identifier().toString());
 				profileTag.putInt("HoldX", profile.holdPosition().getX());
 				profileTag.putInt("HoldY", profile.holdPosition().getY());
 				profileTag.putInt("HoldZ", profile.holdPosition().getZ());
@@ -626,27 +635,25 @@ final class ArmorCoreSavedData extends SavedData {
 
 	private static void readEscortProfiles(CompoundTag owner, Set<UUID> linkedSuitIds,
 			Map<UUID, ArmorEscortProfile> escortProfiles) {
-		ListTag profiles = owner.getList("EscortProfiles", Tag.TAG_COMPOUND);
+		ListTag profiles = owner.getListOrEmpty("EscortProfiles");
 		for (int index = 0; index < profiles.size(); index++) {
 			try {
-				CompoundTag profileTag = profiles.getCompound(index);
-				if (!profileTag.hasUUID("Suit")) continue;
-				UUID suitId = profileTag.getUUID("Suit");
+				CompoundTag profileTag = profiles.getCompoundOrEmpty(index);
+				if (!TagUtils.hasUUID(profileTag, "Suit")) continue;
+				UUID suitId = TagUtils.getUUID(profileTag, "Suit");
 				if (!linkedSuitIds.contains(suitId)) continue;
 				ArmorEscortProfile.CombatPolicy attackMode =
-						ArmorEscortProfile.CombatPolicy.fromName(profileTag.getString("CombatPolicy"));
-				int attackRange = profileTag.contains("AttackRange", Tag.TAG_INT)
-						? profileTag.getInt("AttackRange") : 32;
+						ArmorEscortProfile.CombatPolicy.fromName(profileTag.getStringOr("CombatPolicy", ""));
+				int attackRange = profileTag.getIntOr("AttackRange", 32);
 				ArmorEscortProfile.EscortAnchor stance =
-						ArmorEscortProfile.EscortAnchor.fromName(profileTag.getString("EscortAnchor"));
+						ArmorEscortProfile.EscortAnchor.fromName(profileTag.getStringOr("EscortAnchor", ""));
 				ResourceKey<Level> holdDimension = null;
 				BlockPos holdPosition = null;
-				if (profileTag.contains("HoldDimension", Tag.TAG_STRING)
-						&& profileTag.contains("HoldX", Tag.TAG_INT)) {
+				if (profileTag.contains("HoldDimension") && profileTag.contains("HoldX")) {
 					holdDimension = ResourceKey.create(Registries.DIMENSION,
-							ResourceLocation.parse(profileTag.getString("HoldDimension")));
-					holdPosition = new BlockPos(profileTag.getInt("HoldX"),
-							profileTag.getInt("HoldY"), profileTag.getInt("HoldZ"));
+							Identifier.parse(profileTag.getStringOr("HoldDimension", "")));
+					holdPosition = new BlockPos(profileTag.getIntOr("HoldX", 0),
+							profileTag.getIntOr("HoldY", 0), profileTag.getIntOr("HoldZ", 0));
 				}
 				escortProfiles.put(suitId, new ArmorEscortProfile(
 						attackMode, attackRange, stance, holdDimension, holdPosition));
@@ -660,17 +667,17 @@ final class ArmorCoreSavedData extends SavedData {
 		ListTag result = new ListTag();
 		for (UUID suitId : linkedSuitIds) {
 			CompoundTag link = new CompoundTag();
-			link.putUUID("Suit", suitId);
+			TagUtils.putUUID(link, "Suit", suitId);
 			result.add(link);
 		}
 		return result;
 	}
 
 	private static void readLinkedSuits(CompoundTag owner, Set<UUID> target) {
-		ListTag links = owner.getList("LinkedSuits", Tag.TAG_COMPOUND);
+		ListTag links = owner.getListOrEmpty("LinkedSuits");
 		for (int index = 0; index < links.size(); index++) {
-			CompoundTag link = links.getCompound(index);
-			if (link.hasUUID("Suit")) target.add(link.getUUID("Suit"));
+			CompoundTag link = links.getCompoundOrEmpty(index);
+			if (TagUtils.hasUUID(link, "Suit")) target.add(TagUtils.getUUID(link, "Suit"));
 		}
 	}
 
@@ -679,9 +686,9 @@ final class ArmorCoreSavedData extends SavedData {
 		ListTag result = new ListTag();
 		for (PlatformBinding binding : bindings.values()) {
 			CompoundTag bindingTag = new CompoundTag();
-			bindingTag.putUUID("Suit", binding.suitId());
-			bindingTag.putUUID("Platform", binding.platformId());
-			bindingTag.putString("Dimension", binding.dimension().location().toString());
+			TagUtils.putUUID(bindingTag, "Suit", binding.suitId());
+			TagUtils.putUUID(bindingTag, "Platform", binding.platformId());
+			bindingTag.putString("Dimension", binding.dimension().identifier().toString());
 			bindingTag.putInt("X", binding.pos().getX());
 			bindingTag.putInt("Y", binding.pos().getY());
 			bindingTag.putInt("Z", binding.pos().getZ());
@@ -692,7 +699,7 @@ final class ArmorCoreSavedData extends SavedData {
 			bindingTag.putInt("AttackRange", profile.rangeBlocks());
 			bindingTag.putString("EscortAnchor", profile.stance().name());
 			if (profile.holdDimension() != null && profile.holdPosition() != null) {
-				bindingTag.putString("HoldDimension", profile.holdDimension().location().toString());
+				bindingTag.putString("HoldDimension", profile.holdDimension().identifier().toString());
 				bindingTag.putInt("HoldX", profile.holdPosition().getX());
 				bindingTag.putInt("HoldY", profile.holdPosition().getY());
 				bindingTag.putInt("HoldZ", profile.holdPosition().getZ());

@@ -126,12 +126,12 @@ public final class ArmorIntegrityController {
 		ServerPlayer owner = level.getServer().getPlayerList().getPlayer(identity.ownerId());
 		if (owner == null) return;
 		if (mutation.current() == 0 && mutation.previous() > 0) {
-			owner.displayClientMessage(Component.literal(
-					"战甲完整度归零：作战与反重力失能，可召回平台维修"), true);
+			owner.sendOverlayMessage(Component.literal(
+					"战甲完整度归零：作战与反重力失能，可召回平台维修"));
 		} else if (mutation.current() < ArmorIntegrityRules.DEGRADED_THRESHOLD
 				&& mutation.previous() >= ArmorIntegrityRules.DEGRADED_THRESHOLD) {
-			owner.displayClientMessage(Component.literal(
-					"战甲完整度低于 25%：机动与攻击频率下降"), true);
+			owner.sendOverlayMessage(Component.literal(
+					"战甲完整度低于 25%：机动与攻击频率下降"));
 		}
 	}
 
@@ -160,10 +160,10 @@ public final class ArmorIntegrityController {
 
 	/** Zero-integrity stable carriers fall under collision instead of hovering or disappearing. */
 	public static void tickDisabledCarrier(ArmorStand carrier) {
-		carrier.setInvulnerable(true);
+		carrier.setPermanentlyInvulnerable(true);
 		if (carrier.level() instanceof ServerLevel level
-				&& carrier.getY() <= level.getMinBuildHeight() + 2.5D) {
-			carrier.setPos(carrier.getX(), level.getMinBuildHeight() + 2.5D, carrier.getZ());
+				&& carrier.getY() <= level.getMinY() + 2.5D) {
+			carrier.setPos(carrier.getX(), level.getMinY() + 2.5D, carrier.getZ());
 			carrier.setNoGravity(true);
 			carrier.noPhysics = true;
 			carrier.setDeltaMovement(Vec3.ZERO);
@@ -180,7 +180,7 @@ public final class ArmorIntegrityController {
 
 	/** Recall/return controllers call this before their authoritative movement step. */
 	public static void prepareControlledMovement(ArmorStand carrier) {
-		carrier.setInvulnerable(true);
+		carrier.setPermanentlyInvulnerable(true);
 		carrier.setNoGravity(true);
 		carrier.noPhysics = true;
 		carrier.setDeltaMovement(Vec3.ZERO);

@@ -4,7 +4,7 @@ import dev.codex.flightarmor.FlightArmorMod;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvent;
 
 /**
@@ -141,7 +141,7 @@ public final class ModSoundEvents {
 	}
 
 	private static SoundEvent register(String path) {
-		ResourceLocation id = FlightArmorMod.id(path);
+		Identifier id = FlightArmorMod.id(path);
 		return Registry.register(BuiltInRegistries.SOUND_EVENT, id, SoundEvent.createVariableRangeEvent(id));
 	}
 }

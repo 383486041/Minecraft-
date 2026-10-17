@@ -49,7 +49,7 @@ public final class ImpactBlastController {
 	public static int detonate(ServerPlayer player, Vec3 origin, Vec3 direction, double impactSpeed) {
 		if (player == null || !finite(origin) || !finite(direction)) return 0;
 		if (direction.lengthSqr() < 1.0E-8D) return 0;
-		ServerLevel level = player.serverLevel();
+		ServerLevel level = player.level();
 		if (!TerrainDestructionGuard.terrainGriefAllowed(level, player)) return 0;
 
 		ImpactBlastMath.Profile profile = ImpactBlastMath.profile(
@@ -79,7 +79,7 @@ public final class ImpactBlastController {
 	public static int shockwave(ServerPlayer player, Vec3 center, double mach) {
 		if (player == null || !finite(center)) return 0;
 		if (!Double.isFinite(mach) || mach < 1.0D) return 0;
-		ServerLevel level = player.serverLevel();
+		ServerLevel level = player.level();
 		if (!TerrainDestructionGuard.terrainGriefAllowed(level, player)) return 0;
 		ArmorVariant variant = ModItems.fullSetVariant(player).orElse(null);
 		if (variant == null) return 0;
@@ -109,7 +109,7 @@ public final class ImpactBlastController {
 	static int crater(ServerPlayer player, Vec3 center, double radius, double hardnessLimit,
 			double budget, int maximumBlocks) {
 		if (player == null || !finite(center)) return 0;
-		ServerLevel level = player.serverLevel();
+		ServerLevel level = player.level();
 		if (!TerrainDestructionGuard.terrainGriefAllowed(level, player)) return 0;
 		return carve(level, player, center, radius, hardnessLimit, budget, maximumBlocks);
 	}

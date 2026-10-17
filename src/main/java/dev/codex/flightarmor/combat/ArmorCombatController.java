@@ -77,12 +77,12 @@ public final class ArmorCombatController {
 	public static void initialize() {
 		ServerLifecycleEvents.SERVER_STOPPING.register(ArmorCombatController::handleServerStopping);
 		AttackEntityCallback.EVENT.register((player, world, hand, target, hitResult) -> {
-			if (world.isClientSide || !(player instanceof ServerPlayer serverPlayer)) {
+			if (world.isClientSide() || !(player instanceof ServerPlayer serverPlayer)) {
 				return InteractionResult.PASS;
 			}
 			ArmorCombatState state = stateFor(serverPlayer);
 			if (!state.bladeExtended) return InteractionResult.PASS;
-			long now = combatTime(serverPlayer.getServer());
+			long now = combatTime(serverPlayer.level().getServer());
 			ArmorCombatGate.Result gate = ArmorCombatGate.evaluate(serverPlayer,
 					ArmorAttackType.ENERGY_BLADE_SLASH, ArmorAttackAction.PRESS, state, now,
 					ArmorCombatTuning.BLADE_SLASH_ENERGY_COST);
@@ -94,7 +94,7 @@ public final class ArmorCombatController {
 	/** C2S ArmorAttackIntentPayload 的唯一接收入口。 */
 	public static void handleIntent(ServerPlayer player, ArmorAttackIntentPayload payload) {
 		ArmorCombatState state = stateFor(player);
-		long now = combatTime(player.getServer());
+		long now = combatTime(player.level().getServer());
 		if (payload.clientSequence() <= state.lastClientSequence) {
 			// 同一可靠连接上的重复包无需确认；此前权威回包已经在同一有序通道中。
 			return;
@@ -222,7 +222,7 @@ public final class ArmorCombatController {
 	 */
 	public static void handleJoin(ServerPlayer player) {
 		ArmorCombatState stale = STATES.remove(player.getUUID());
-		long now = combatTime(player.getServer());
+		long now = combatTime(player.level().getServer());
 		if (stale != null) checkpointPersistentState(player, stale, now, true);
 		ArmorCombatState state = stateFor(player);
 		sendOwnerState(player, state, ArmorCombatDenyReason.NONE, now);
@@ -232,7 +232,7 @@ public final class ArmorCombatController {
 	/** 重生后保留能量与冷却，但清除旧实体上的瞬时攻击阶段并同步新维度。 */
 	public static void handleRespawn(ServerPlayer player) {
 		ArmorCombatState state = stateFor(player);
-		long now = combatTime(player.getServer());
+		long now = combatTime(player.level().getServer());
 		DIVE_ACTIONS.remove(player.getUUID());
 		resetPhase(player, state, now, true);
 		state.dimension = player.level().dimension();
@@ -242,7 +242,7 @@ public final class ArmorCombatController {
 	/** 换维完成后原子更新战斗维度，避免新维度中的第一次攻击被误判为跨维请求。 */
 	public static void handleDimensionChange(ServerPlayer player) {
 		ArmorCombatState state = stateFor(player);
-		long now = combatTime(player.getServer());
+		long now = combatTime(player.level().getServer());
 		DIVE_ACTIONS.remove(player.getUUID());
 		resetPhase(player, state, now, true);
 		state.dimension = player.level().dimension();
@@ -253,7 +253,7 @@ public final class ArmorCombatController {
 	public static void remove(ServerPlayer player) {
 		ArmorCombatState state = STATES.remove(player.getUUID());
 		if (state != null) {
-			checkpointPersistentState(player, state, combatTime(player.getServer()), true);
+			checkpointPersistentState(player, state, combatTime(player.level().getServer()), true);
 		}
 		cancelDelayedCruiseAttacksByOwner(player.getUUID());
 		CRUISE_STATES.keySet().removeIf(key -> key.ownerId().equals(player.getUUID()));
@@ -294,7 +294,7 @@ public final class ArmorCombatController {
 
 		ArmorCombatState state = STATES.get(player.getUUID());
 		if (state == null) return;
-		long now = combatTime(player.getServer());
+		long now = combatTime(player.level().getServer());
 		if (state.bladeExtended) setBladeExtended(player, state, false);
 		resetPhase(player, state, now, true);
 		sendOwnerState(player, state, reason == null ? ArmorCombatDenyReason.NONE : reason, now);
@@ -306,7 +306,7 @@ public final class ArmorCombatController {
 				? stateFor(tracked)
 				: STATES.get(tracked.getUUID());
 		if (state == null) return;
-		long now = combatTime(tracked.getServer());
+		long now = combatTime(tracked.level().getServer());
 		if (tracked.getUUID().equals(recipient.getUUID())) {
 			sendOwnerState(recipient, state, ArmorCombatDenyReason.NONE, now);
 		}
@@ -482,7 +482,7 @@ public final class ArmorCombatController {
 				? centralBlock.getLocation() : maximumEnd;
 		double corridorLength = origin.distanceTo(visualEnd);
 		AABB area = new AABB(origin, visualEnd).inflate(profile.halfWidth(), 1.4D, profile.halfWidth());
-		List<LivingEntity> candidates = player.serverLevel().getEntitiesOfClass(
+		List<LivingEntity> candidates = player.level().getEntitiesOfClass(
 				LivingEntity.class, area, candidate -> CombatTargetPolicy.canDamage(player, candidate));
 		candidates.sort((left, right) -> Double.compare(
 				origin.distanceToSqr(left.getBoundingBox().getCenter()),
@@ -500,14 +500,13 @@ public final class ArmorCombatController {
 			if (bladeTargetOccluded(player, origin, targetCenter)) continue;
 			float falloff = (float) Mth.clamp(1.0D - projection / (profile.range() * 1.4D),
 					0.62D, 1.0D);
-			if (!target.hurt(ModDamageTypes.gravityPulse(player), profile.damage() * falloff)) continue;
-			target.knockback(profile.knockback(),
-					player.getX() - target.getX(), player.getZ() - target.getZ());
+			if (!target.hurtOrSimulate(ModDamageTypes.gravityPulse(player), profile.damage() * falloff)) continue;
+			target.knockback(profile.knockback(), player.getX() - target.getX(), player.getZ() - target.getZ(), null, 0.0F);
 			if (variant != ArmorVariant.SENTINEL) {
 				target.setDeltaMovement(target.getDeltaMovement().add(0.0D,
 						variant == ArmorVariant.SWIFT ? 0.12D : 0.24D, 0.0D));
 			}
-			target.hurtMarked = true;
+			target.syncVelocity = true;
 			if (firstHit == null) firstHit = target;
 			hitCount++;
 		}
@@ -518,23 +517,23 @@ public final class ArmorCombatController {
 		state.visualRevision++;
 		broadcastVisual(player, visualPayload(player, state, now));
 		broadcastFx(player, new ArmorAttackFxPayload(
-				player.getUUID(), player.level().dimension().location(), state.serverAttackId, 0,
+				player.getUUID(), player.level().dimension().identifier(), state.serverAttackId, 0,
 				ArmorAttackType.ENERGY_BLADE_SLASH, variant, leftHand, origin,
 				firstHit == null ? visualEnd : firstHit.getBoundingBox().getCenter(),
 				visualEnd, new Vec3(0.0D, 1.0D, 0.0D),
 				firstHit == null ? ArmorAttackHitKind.MISS : ArmorAttackHitKind.ENTITY,
 				firstHit == null ? ArmorAttackFxPayload.NO_ENTITY_ID : firstHit.getId(),
-				1.0F, player.isInWaterOrBubble()));
+				1.0F, player.isInWater()));
 		if (variant == ArmorVariant.SWIFT) {
 			boolean supportLeft = !leftHand;
 			Vec3 supportOrigin = ArmorAnchorResolver.resolve(player, variant, combatAnchorPose(player),
 					ArmorSemanticAnchor.palm(supportLeft), forward);
 			broadcastFx(player, new ArmorAttackFxPayload(
-					player.getUUID(), player.level().dimension().location(), state.serverAttackId, 1,
+					player.getUUID(), player.level().dimension().identifier(), state.serverAttackId, 1,
 					ArmorAttackType.ENERGY_BLADE_SLASH, variant, supportLeft, supportOrigin,
 					visualEnd, visualEnd, new Vec3(0.0D, 1.0D, 0.0D),
 					ArmorAttackHitKind.MISS, ArmorAttackFxPayload.NO_ENTITY_ID,
-					1.0F, player.isInWaterOrBubble()));
+					1.0F, player.isInWater()));
 		}
 		sendOwnerState(player, state, ArmorCombatDenyReason.NONE, now);
 	}
@@ -557,7 +556,7 @@ public final class ArmorCombatController {
 		Vec3 origin = ArmorAnchorResolver.resolve(player, variant, combatAnchorPose(player),
 				ArmorSemanticAnchor.palm(state.activeLeftHand), forward);
 		Vec3 visualEnd = origin.add(forward.scale(reach));
-		List<LivingEntity> candidates = player.serverLevel().getEntitiesOfClass(
+		List<LivingEntity> candidates = player.level().getEntitiesOfClass(
 				LivingEntity.class, player.getBoundingBox().inflate(reach, 2.0D, reach),
 				candidate -> CombatTargetPolicy.canDamage(player, candidate));
 		candidates.sort((left, right) -> Double.compare(
@@ -572,10 +571,10 @@ public final class ArmorCombatController {
 			if (distance > reach + target.getBbWidth() * 0.5D || distance < 1.0E-5D) continue;
 			if (relative.scale(1.0D / distance).dot(forward) < halfAngleCos) continue;
 			if (bladeTargetOccluded(player, player.getEyePosition(), targetCenter)) continue;
-			if (!target.hurt(ModDamageTypes.gravityPulse(player), damage)) continue;
-			target.knockback(knockback, player.getX() - target.getX(), player.getZ() - target.getZ());
+			if (!target.hurtOrSimulate(ModDamageTypes.gravityPulse(player), damage)) continue;
+			target.knockback(knockback, player.getX() - target.getX(), player.getZ() - target.getZ(), null, 0.0F);
 			if (step == 2) target.setDeltaMovement(target.getDeltaMovement().add(0.0D, 0.18D, 0.0D));
-			target.hurtMarked = true;
+			target.syncVelocity = true;
 			if (firstHit == null) firstHit = target;
 			hitCount++;
 		}
@@ -585,13 +584,13 @@ public final class ArmorCombatController {
 		state.visualRevision++;
 		broadcastVisual(player, visualPayload(player, state, now));
 		broadcastFx(player, new ArmorAttackFxPayload(
-				player.getUUID(), player.level().dimension().location(), state.serverAttackId, 0,
+				player.getUUID(), player.level().dimension().identifier(), state.serverAttackId, 0,
 				ArmorAttackType.ENERGY_BLADE_COMBO, variant, state.activeLeftHand, origin,
 				firstHit == null ? visualEnd : firstHit.getBoundingBox().getCenter(), visualEnd,
 				new Vec3(0.0D, 1.0D, 0.0D),
 				firstHit == null ? ArmorAttackHitKind.MISS : ArmorAttackHitKind.ENTITY,
 				firstHit == null ? ArmorAttackFxPayload.NO_ENTITY_ID : firstHit.getId(),
-				(step + 1) / 3.0F, player.isInWaterOrBubble()));
+				(step + 1) / 3.0F, player.isInWater()));
 		sendOwnerState(player, state, ArmorCombatDenyReason.NONE, now);
 	}
 	private static boolean bladeTargetOccluded(ServerPlayer player, Vec3 origin,
@@ -608,7 +607,7 @@ public final class ArmorCombatController {
 		if (state.bladeExtended == extended) return;
 		state.bladeExtended = extended;
 		state.bladeRevision++;
-		state.bladeReadyAtTick = extended ? combatTime(player.getServer()) + 8L : Long.MAX_VALUE;
+		state.bladeReadyAtTick = extended ? combatTime(player.level().getServer()) + 8L : Long.MAX_VALUE;
 		ArmorBladeStatePayload payload = bladePayload(player, state);
 		Set<ServerPlayer> recipients = new HashSet<>(PlayerLookup.tracking(player));
 		recipients.add(player);
@@ -719,9 +718,9 @@ public final class ArmorCombatController {
 				ArmorWeaponRules.coreExplosion(variant, charge).enabled();
 		if (!nativeExplosion && target != null
 				&& CombatTargetPolicy.canDamage(player, target)) {
-			boolean hurt = target.hurt(ModDamageTypes.coreBeam(player), damage);
+			boolean hurt = target.hurtOrSimulate(ModDamageTypes.coreBeam(player), damage);
 			if (hurt && target instanceof LivingEntity living) {
-				living.knockback(knockback, player.getX() - living.getX(), player.getZ() - living.getZ());
+				living.knockback(knockback, player.getX() - living.getX(), player.getZ() - living.getZ(), null, 0.0F);
 			}
 		}
 		Vec3 visualEndpoint = ArmorVariantAttackResolver.applyCore(player, variant, hit, target,
@@ -741,7 +740,7 @@ public final class ArmorCombatController {
 
 		broadcastVisual(player, visualPayload(player, state, now));
 		broadcastFx(player, new ArmorAttackFxPayload(
-				player.getUUID(), player.level().dimension().location(), state.serverAttackId, 0,
+				player.getUUID(), player.level().dimension().identifier(), state.serverAttackId, 0,
 				ArmorAttackType.CORE_BEAM, variant, false,
 				hit.origin(), hit.endpoint(), visualEndpoint, hit.impactNormal(), hit.hitKind(),
 				target == null ? ArmorAttackFxPayload.NO_ENTITY_ID : target.getId(), charge, underwater));
@@ -766,10 +765,10 @@ public final class ArmorCombatController {
 		checkpointPersistentState(player, state, now, true);
 
 		broadcastVisual(player, visualPayload(player, state, now));
-		boolean underwater = player.isInWaterOrBubble();
+		boolean underwater = player.isInWater();
 		for (SentinelOverdriveSalvo.Shot shot : salvo.shots()) {
 			broadcastFx(player, new ArmorAttackFxPayload(
-					player.getUUID(), player.level().dimension().location(),
+					player.getUUID(), player.level().dimension().identifier(),
 					state.serverAttackId, shot.eventIndex(),
 					ArmorAttackType.CORE_BEAM, ArmorVariant.SENTINEL,
 					shot.leftWing(), shot.origin(), shot.endpoint(), shot.endpoint(),
@@ -803,10 +802,9 @@ public final class ArmorCombatController {
 				player, variant, combatAnchorPose(player), leftHand, profile.range());
 		Entity target = hit.entity();
 		if (target != null && CombatTargetPolicy.canDamage(player, target)) {
-			boolean hurt = target.hurt(ModDamageTypes.coreBeam(player), profile.damage());
+			boolean hurt = target.hurtOrSimulate(ModDamageTypes.coreBeam(player), profile.damage());
 			if (hurt && target instanceof LivingEntity living) {
-				living.knockback(profile.knockback(),
-						player.getX() - living.getX(), player.getZ() - living.getZ());
+				living.knockback(profile.knockback(), player.getX() - living.getX(), player.getZ() - living.getZ(), null, 0.0F);
 			}
 		}
 
@@ -828,11 +826,11 @@ public final class ArmorCombatController {
 
 		broadcastVisual(player, visualPayload(player, state, now));
 		broadcastFx(player, new ArmorAttackFxPayload(
-				player.getUUID(), player.level().dimension().location(), state.serverAttackId, 0,
+				player.getUUID(), player.level().dimension().identifier(), state.serverAttackId, 0,
 				ArmorAttackType.HAND_BEAM_PULSE, variant, leftHand,
 				hit.origin(), hit.endpoint(), hit.impactNormal(), hit.hitKind(),
 				target == null ? ArmorAttackFxPayload.NO_ENTITY_ID : target.getId(),
-				EnhancedBeamMath.PULSE_FX_INTENSITY, player.isInWaterOrBubble()));
+				EnhancedBeamMath.PULSE_FX_INTENSITY, player.isInWater()));
 		sendOwnerState(player, state, ArmorCombatDenyReason.NONE, now);
 	}
 
@@ -875,10 +873,9 @@ public final class ArmorCombatController {
 				direction.scale(profile.craterRadius() * EnhancedBeamMath.CRATER_SINK_RATIO));
 
 		if (target != null && CombatTargetPolicy.canDamage(player, target)) {
-			boolean hurt = target.hurt(ModDamageTypes.coreBeam(player), profile.damage());
+			boolean hurt = target.hurtOrSimulate(ModDamageTypes.coreBeam(player), profile.damage());
 			if (hurt && target instanceof LivingEntity living) {
-				living.knockback(profile.knockback(),
-						player.getX() - living.getX(), player.getZ() - living.getZ());
+				living.knockback(profile.knockback(), player.getX() - living.getX(), player.getZ() - living.getZ(), null, 0.0F);
 			}
 		}
 		if (struckSomething) {
@@ -903,13 +900,13 @@ public final class ArmorCombatController {
 
 		broadcastVisual(player, visualPayload(player, state, now));
 		broadcastFx(player, new ArmorAttackFxPayload(
-				player.getUUID(), player.level().dimension().location(), state.serverAttackId, 0,
+				player.getUUID(), player.level().dimension().identifier(), state.serverAttackId, 0,
 				ArmorAttackType.HAND_BEAM_LANCE, variant, false,
 				hit.origin(), hit.endpoint(),
 				struckSomething ? craterCenter : hit.endpoint(),
 				hit.impactNormal(), hit.hitKind(),
 				target == null ? ArmorAttackFxPayload.NO_ENTITY_ID : target.getId(),
-				charge, player.isInWaterOrBubble()));
+				charge, player.isInWater()));
 		sendOwnerState(player, state, ArmorCombatDenyReason.NONE, now);
 	}
 
@@ -1009,12 +1006,12 @@ public final class ArmorCombatController {
 				? DiveImpactKind.WALL : DiveImpactKind.PATH_ENTITY;
 		return commitDiveImpact(player, action, preContactVelocity, contact.position(),
 				contact.normal(), contact.hitKind(), contact.targetEntityId(),
-				player.isInWaterOrBubble(), kind);
+				player.isInWater(), kind);
 	}
 
 	public static boolean tryDiveStopImpact(ServerPlayer player, Vec3 currentVelocity,
 			Vec3 stopPosition) {
-		if (player == null || !player.isInWaterOrBubble()
+		if (player == null || !player.isInWater()
 				|| !finite(currentVelocity) || !finite(stopPosition)) return false;
 		DiveImpactAction action = diveAction(player);
 		action.observe(currentVelocity);
@@ -1040,8 +1037,8 @@ public final class ArmorCombatController {
 				player.getBoundingBox().minY + 0.05D, contactPosition.z);
 		return commitDiveImpact(player, action, preContactVelocity, impact,
 				new Vec3(0.0D, 1.0D, 0.0D), ArmorAttackHitKind.BLOCK,
-				ArmorAttackFxPayload.NO_ENTITY_ID, player.isInWaterOrBubble(),
-				player.isInWaterOrBubble() ? DiveImpactKind.WATER_PRESSURE : DiveImpactKind.LANDING);
+				ArmorAttackFxPayload.NO_ENTITY_ID, player.isInWater(),
+				player.isInWater() ? DiveImpactKind.WATER_PRESSURE : DiveImpactKind.LANDING);
 	}
 
 	private static boolean commitDiveImpact(ServerPlayer player, DiveImpactAction action,
@@ -1051,7 +1048,7 @@ public final class ArmorCombatController {
 		double speed = preContactVelocity.length();
 		if (!Double.isFinite(speed) || speed < ArmorCombatTuning.DIVE_IMPACT_MIN_SPEED) return false;
 		ArmorCombatState state = stateFor(player);
-		long now = combatTime(player.getServer());
+		long now = combatTime(player.level().getServer());
 		boolean cooldownReady = now >= state.diveImpactCooldownUntilTick;
 		if (!GravityImpactSweep.canCommit(action.sequence, action.completedSequence, cooldownReady)) {
 			return false;
@@ -1090,7 +1087,7 @@ public final class ArmorCombatController {
 
 		applyDiveResponse(player, variant, preContactVelocity, impactNormal, impactKind, underwater);
 		player.fallDistance = 0.0F;
-		player.hurtMarked = true;
+		player.syncVelocity = true;
 		broadcastVisual(player, visualPayload(player, state, now));
 		Vec3 direction = preContactVelocity.lengthSqr() < 1.0E-8D
 				? Vec3.ZERO : preContactVelocity.normalize();
@@ -1099,7 +1096,7 @@ public final class ArmorCombatController {
 		Vec3 effectEndpoint = direction.lengthSqr() > 1.0E-8D
 				? impact.add(direction.scale(visualReach)) : impact;
 		broadcastFx(player, new ArmorAttackFxPayload(
-				player.getUUID(), player.level().dimension().location(), state.serverAttackId, 0,
+				player.getUUID(), player.level().dimension().identifier(), state.serverAttackId, 0,
 				ArmorAttackType.GRAVITY_DIVE_IMPACT, variant, false,
 				impact, impact, effectEndpoint, safeNormal(impactNormal), hitKind,
 				targetEntityId, profile.strength(), underwater));
@@ -1133,7 +1130,7 @@ public final class ArmorCombatController {
 		AABB broadPhase = startBox.expandTowards(delta).inflate(0.40D);
 		GravityImpactSweep.Box moving = pureBox(startBox);
 		DiveContact best = DiveContact.miss();
-		for (LivingEntity target : player.serverLevel().getEntitiesOfClass(
+		for (LivingEntity target : player.level().getEntitiesOfClass(
 				LivingEntity.class, broadPhase,
 				candidate -> candidate != player && CombatTargetPolicy.canDamage(player, candidate))) {
 			GravityImpactSweep.Contact hit = GravityImpactSweep.sweep(
@@ -1220,7 +1217,7 @@ public final class ArmorCombatController {
 
 		ArmorCombatState state = cruiseStateFor(owner, carrier);
 		if (state == null) return CruiseWristResult.missed();
-		long now = combatTime(owner.getServer());
+		long now = combatTime(owner.level().getServer());
 		if (!allowsCruiseRanged(carrier, now)) return CruiseWristResult.missed();
 		if (!state.dimension.equals(carrier.level().dimension())) {
 			state.dimension = carrier.level().dimension();
@@ -1261,9 +1258,9 @@ public final class ArmorCombatController {
 		boolean nativeExplosion = ArmorWeaponRules.wristExplosion(
 				variant, autonomousCharge, true).enabled();
 		boolean hurt = !nativeExplosion
-				&& intendedTarget.hurt(ModDamageTypes.gravityPulse(owner, carrier), damage);
+				&& intendedTarget.hurtOrSimulate(ModDamageTypes.gravityPulse(owner, carrier), damage);
 		if (hurt && intendedTarget instanceof LivingEntity living) {
-			living.knockback(knockback, carrier.getX() - living.getX(), carrier.getZ() - living.getZ());
+			living.knockback(knockback, carrier.getX() - living.getX(), carrier.getZ() - living.getZ(), null, 0.0F);
 		}
 		List<ArmorVariantAttackResolver.VisualSegment> chainSegments =
 				ArmorVariantAttackResolver.applyWrist(
@@ -1285,14 +1282,14 @@ public final class ArmorCombatController {
 				ArmorCombatPhase.FIRING, leftHand, now, ArmorCombatTuning.WRIST_FIRING_TICKS);
 		broadcastCarrierVisual(carrier, owner, visual);
 		broadcastCarrierFx(carrier, owner, new ArmorAttackFxPayload(
-				carrier.getUUID(), carrier.level().dimension().location(), attackId, 0,
+				carrier.getUUID(), carrier.level().dimension().identifier(), attackId, 0,
 				ArmorAttackType.WRIST_GRAVITY_PULSE, variant, leftHand,
 				hit.origin(), hit.endpoint(), hit.impactNormal(), hit.hitKind(),
 				intendedTarget.getId(), autonomousCharge, underwater));
 		int chainEventIndex = 1;
 		for (ArmorVariantAttackResolver.VisualSegment segment : chainSegments) {
 			broadcastCarrierFx(carrier, owner, new ArmorAttackFxPayload(
-					carrier.getUUID(), carrier.level().dimension().location(), attackId,
+					carrier.getUUID(), carrier.level().dimension().identifier(), attackId,
 					chainEventIndex++, ArmorAttackType.WRIST_GRAVITY_PULSE, variant, leftHand,
 					segment.origin(), segment.endpoint(), new Vec3(0.0D, 1.0D, 0.0D),
 					ArmorAttackHitKind.ENTITY, ArmorAttackFxPayload.NO_ENTITY_ID,
@@ -1311,7 +1308,7 @@ public final class ArmorCombatController {
 
 		ArmorCombatState state = cruiseStateFor(owner, carrier);
 		if (state == null) return CruiseWeaponResult.missed();
-		long now = combatTime(owner.getServer());
+		long now = combatTime(owner.level().getServer());
 		if (!allowsCruiseRanged(carrier, now)) return CruiseWeaponResult.missed();
 		if (!cruiseStateReady(carrier, state, now, state.coreCooldownUntilTick,
 				ArmorCombatTuning.CRUISE_CORE_ENERGY_COST)) {
@@ -1331,10 +1328,9 @@ public final class ArmorCombatController {
 		boolean nativeExplosion =
 				ArmorWeaponRules.coreExplosion(variant, charge).enabled();
 		boolean hurt = !nativeExplosion
-				&& target.hurt(ModDamageTypes.coreBeam(owner, carrier), damage);
+				&& target.hurtOrSimulate(ModDamageTypes.coreBeam(owner, carrier), damage);
 		if (hurt) {
-			target.knockback(ArmorCombatTuning.CRUISE_CORE_KNOCKBACK,
-					carrier.getX() - target.getX(), carrier.getZ() - target.getZ());
+			target.knockback(ArmorCombatTuning.CRUISE_CORE_KNOCKBACK, carrier.getX() - target.getX(), carrier.getZ() - target.getZ(), null, 0.0F);
 		}
 		Vec3 visualEndpoint = ArmorVariantAttackResolver.applyCore(owner, carrier, variant, hit, target,
 				damage, range, ArmorCombatTuning.CRUISE_CORE_KNOCKBACK, charge);
@@ -1347,7 +1343,7 @@ public final class ArmorCombatController {
 				carrier.getUUID(), attackId, 0, ArmorAttackType.CRUISE_CORE_BEAM,
 				ArmorCombatPhase.FIRING, false, now, ArmorCombatTuning.CRUISE_CORE_FIRING_TICKS));
 		broadcastCarrierFx(carrier, owner, new ArmorAttackFxPayload(
-				carrier.getUUID(), carrier.level().dimension().location(), attackId, 0,
+				carrier.getUUID(), carrier.level().dimension().identifier(), attackId, 0,
 				ArmorAttackType.CRUISE_CORE_BEAM, variant, false,
 				hit.origin(), hit.endpoint(), visualEndpoint, hit.impactNormal(), hit.hitKind(),
 				target.getId(), charge, carrier.isEyeInFluid(FluidTags.WATER)));
@@ -1378,7 +1374,7 @@ public final class ArmorCombatController {
 			boolean left = trace.left();
 			CombatRaycast.Result podHit = trace.hit();
 			broadcastCarrierFx(carrier, owner, new ArmorAttackFxPayload(
-					carrier.getUUID(), carrier.level().dimension().location(), attackId,
+					carrier.getUUID(), carrier.level().dimension().identifier(), attackId,
 					left ? 1 : 2, ArmorAttackType.CRUISE_CORE_BEAM,
 					ArmorVariant.SENTINEL, left,
 					podHit.origin(), podHit.endpoint(), podHit.endpoint(),
@@ -1405,7 +1401,7 @@ public final class ArmorCombatController {
 		}
 		ArmorCombatState state = cruiseStateFor(owner, carrier);
 		if (state == null) return CruiseWeaponResult.missed();
-		long now = combatTime(owner.getServer());
+		long now = combatTime(owner.level().getServer());
 		if (!allowsCruiseRanged(carrier, now)) return CruiseWeaponResult.missed();
 		if (!cruiseStateReady(carrier, state, now, state.sentinelDroneCooldownUntilTick,
 				ArmorCombatTuning.SENTINEL_DRONE_PULSE_ENERGY_COST)) {
@@ -1426,11 +1422,10 @@ public final class ArmorCombatController {
 		}
 		if (hit.entity() != target) return CruiseWeaponResult.missed();
 
-		boolean hurt = target.hurt(ModDamageTypes.coreBeam(owner, carrier),
+		boolean hurt = target.hurtOrSimulate(ModDamageTypes.coreBeam(owner, carrier),
 				ArmorCombatTuning.SENTINEL_DRONE_PULSE_DAMAGE);
 		if (hurt) {
-			target.knockback(ArmorCombatTuning.SENTINEL_DRONE_PULSE_KNOCKBACK,
-					carrier.getX() - target.getX(), carrier.getZ() - target.getZ());
+			target.knockback(ArmorCombatTuning.SENTINEL_DRONE_PULSE_KNOCKBACK, carrier.getX() - target.getX(), carrier.getZ() - target.getZ(), null, 0.0F);
 		}
 		long attackId = NEXT_SERVER_ATTACK_ID.incrementAndGet();
 		state.nextLeftSentinelDrone = !firedLeft;
@@ -1445,7 +1440,7 @@ public final class ArmorCombatController {
 				ArmorCombatPhase.FIRING, firedLeft, now,
 				ArmorCombatTuning.SENTINEL_DRONE_PULSE_FIRING_TICKS));
 		broadcastCarrierFx(carrier, owner, new ArmorAttackFxPayload(
-				carrier.getUUID(), carrier.level().dimension().location(), attackId, 0,
+				carrier.getUUID(), carrier.level().dimension().identifier(), attackId, 0,
 				ArmorAttackType.CRUISE_CORE_BEAM, variant, firedLeft,
 				hit.origin(), hit.endpoint(), hit.endpoint(), hit.impactNormal(),
 				ArmorAttackHitKind.ENTITY, target.getId(), 0.32F,
@@ -1479,7 +1474,7 @@ public final class ArmorCombatController {
 
 		ArmorCombatState state = cruiseStateFor(owner, carrier);
 		if (state == null) return CruiseWeaponResult.missed();
-		long now = combatTime(owner.getServer());
+		long now = combatTime(owner.level().getServer());
 		if (!cruiseStateReady(carrier, state, now, state.diveImpactCooldownUntilTick,
 				ArmorCombatTuning.CRUISE_RAM_ENERGY_COST)) {
 			return CruiseWeaponResult.missed();
@@ -1498,15 +1493,14 @@ public final class ArmorCombatController {
 				return CruiseWeaponResult.missed();
 			}
 		} else {
-			if (!target.hurt(ModDamageTypes.gravityImpact(owner, carrier), damage)) {
+			if (!target.hurtOrSimulate(ModDamageTypes.gravityImpact(owner, carrier), damage)) {
 				return CruiseWeaponResult.missed();
 			}
-			target.knockback(ArmorCombatTuning.CRUISE_RAM_KNOCKBACK,
-					carrier.getX() - target.getX(), carrier.getZ() - target.getZ());
+			target.knockback(ArmorCombatTuning.CRUISE_RAM_KNOCKBACK, carrier.getX() - target.getX(), carrier.getZ() - target.getZ(), null, 0.0F);
 			target.setDeltaMovement(target.getDeltaMovement()
 					.add(velocity.normalize().scale(0.24D))
 					.add(0.0D, 0.10D, 0.0D));
-			target.hurtMarked = true;
+			target.syncVelocity = true;
 		}
 
 		long attackId = NEXT_SERVER_ATTACK_ID.incrementAndGet();
@@ -1518,7 +1512,7 @@ public final class ArmorCombatController {
 				carrier.getUUID(), attackId, 0, ArmorAttackType.CRUISE_RAM,
 				ArmorCombatPhase.FIRING, false, now, ArmorCombatTuning.CRUISE_RAM_FIRING_TICKS));
 		broadcastCarrierFx(carrier, owner, new ArmorAttackFxPayload(
-				carrier.getUUID(), carrier.level().dimension().location(), attackId, 0,
+				carrier.getUUID(), carrier.level().dimension().identifier(), attackId, 0,
 				ArmorAttackType.CRUISE_RAM, variant, false,
 				impact, impact, impact.add(travel), velocity.normalize().scale(-1.0D),
 				ArmorAttackHitKind.ENTITY, target.getId(),
@@ -1540,7 +1534,7 @@ public final class ArmorCombatController {
 
 		ArmorCombatState state = cruiseStateFor(owner, carrier);
 		if (state == null) return CruiseWeaponResult.missed();
-		long now = combatTime(owner.getServer());
+		long now = combatTime(owner.level().getServer());
 		if (!allowsCruiseRanged(carrier, now)) return CruiseWeaponResult.missed();
 		if (!cruiseStateReady(carrier, state, now, state.coreCooldownUntilTick,
 				ArmorCombatTuning.CRUISE_CORE_ENERGY_COST)) {
@@ -1566,10 +1560,9 @@ public final class ArmorCombatController {
 		boolean nativeExplosion =
 				ArmorWeaponRules.coreExplosion(variant, charge).enabled();
 		boolean hurt = !nativeExplosion
-				&& target.hurt(ModDamageTypes.coreBeam(owner, carrier), damage);
+				&& target.hurtOrSimulate(ModDamageTypes.coreBeam(owner, carrier), damage);
 		if (hurt) {
-			target.knockback(ArmorCombatTuning.CRUISE_CORE_KNOCKBACK,
-					carrier.getX() - target.getX(), carrier.getZ() - target.getZ());
+			target.knockback(ArmorCombatTuning.CRUISE_CORE_KNOCKBACK, carrier.getX() - target.getX(), carrier.getZ() - target.getZ(), null, 0.0F);
 		}
 		Vec3 visualEndpoint = ArmorVariantAttackResolver.applyCore(
 				owner, carrier, variant, hit, target, damage, range,
@@ -1585,7 +1578,7 @@ public final class ArmorCombatController {
 				ArmorCombatPhase.FIRING, false, now,
 				ArmorCombatTuning.CRUISE_CORE_FIRING_TICKS));
 		broadcastCarrierFx(carrier, owner, new ArmorAttackFxPayload(
-				carrier.getUUID(), carrier.level().dimension().location(), attackId, 0,
+				carrier.getUUID(), carrier.level().dimension().identifier(), attackId, 0,
 				ArmorAttackType.CRUISE_CORE_BEAM, variant, false,
 				hit.origin(), hit.endpoint(), visualEndpoint, hit.impactNormal(), hit.hitKind(),
 				target.getId(), charge, carrier.isEyeInFluid(FluidTags.WATER)));
@@ -1597,7 +1590,7 @@ public final class ArmorCombatController {
 			LivingEntity target) {
 		ArmorVariant variant = cruiseVariant(owner, carrier);
 		if (variant == null || !validCruiseTarget(owner, carrier, target)
-				|| !allowsCruiseHeavyMelee(carrier, combatTime(owner.getServer()))
+				|| !allowsCruiseHeavyMelee(carrier, combatTime(owner.level().getServer()))
 				|| carrier.getBoundingBox().getCenter()
 						.distanceToSqr(target.getBoundingBox().getCenter()) > 3.35D * 3.35D) {
 			return CruiseWeaponResult.missed();
@@ -1607,7 +1600,7 @@ public final class ArmorCombatController {
 			case SWIFT -> 9.0F;
 			case SENTINEL -> 11.0F;
 		};
-		if (!target.hurt(ModDamageTypes.gravityImpact(owner, carrier), damage)) {
+		if (!target.hurtOrSimulate(ModDamageTypes.gravityImpact(owner, carrier), damage)) {
 			return CruiseWeaponResult.missed();
 		}
 		double knockback = switch (variant) {
@@ -1615,8 +1608,7 @@ public final class ArmorCombatController {
 			case SWIFT -> 0.55D;
 			case SENTINEL -> 0.75D;
 		};
-		target.knockback(knockback,
-				carrier.getX() - target.getX(), carrier.getZ() - target.getZ());
+		target.knockback(knockback, carrier.getX() - target.getX(), carrier.getZ() - target.getZ(), null, 0.0F);
 		return emitRemoteMeleeFx(owner, carrier, target, variant, 0.52F, false);
 	}
 
@@ -1628,7 +1620,7 @@ public final class ArmorCombatController {
 			LivingEntity intendedTarget, RemoteArmorCommandPolicy.UltimateProfile profile) {
 		ArmorVariant variant = cruiseVariant(owner, carrier);
 		if (variant == null || profile == null
-				|| !allowsCruiseHeavyMelee(carrier, combatTime(owner.getServer()))
+				|| !allowsCruiseHeavyMelee(carrier, combatTime(owner.level().getServer()))
 				|| !validCruiseTarget(owner, carrier, intendedTarget)
 				|| carrier.getBoundingBox().getCenter()
 						.distanceToSqr(intendedTarget.getBoundingBox().getCenter()) > 6.5D * 6.5D) {
@@ -1649,7 +1641,7 @@ public final class ArmorCombatController {
 			float falloff = (float) Mth.clamp(
 					1.0D - distance / Math.max(0.001D, profile.radius()) * 0.45D,
 					0.55D, 1.0D);
-			if (!candidate.hurt(ModDamageTypes.gravityImpact(owner, carrier),
+			if (!candidate.hurtOrSimulate(ModDamageTypes.gravityImpact(owner, carrier),
 					profile.damage() * falloff)) continue;
 			Vec3 away = candidate.getBoundingBox().getCenter()
 					.subtract(carrier.getBoundingBox().getCenter());
@@ -1658,7 +1650,7 @@ public final class ArmorCombatController {
 			candidate.setDeltaMovement(candidate.getDeltaMovement()
 					.add(away.x * profile.knockback(), 0.32D + profile.knockback() * 0.18D,
 							away.z * profile.knockback()));
-			candidate.hurtMarked = true;
+			candidate.syncVelocity = true;
 			hitAny = true;
 		}
 		if (!hitAny) return CruiseWeaponResult.missed();
@@ -1667,7 +1659,7 @@ public final class ArmorCombatController {
 
 	private static CruiseWeaponResult emitRemoteMeleeFx(ServerPlayer owner, Entity carrier,
 			LivingEntity target, ArmorVariant variant, float strength, boolean ultimate) {
-		long now = combatTime(owner.getServer());
+		long now = combatTime(owner.level().getServer());
 		long attackId = NEXT_SERVER_ATTACK_ID.incrementAndGet();
 		Vec3 aim = target.getBoundingBox().getCenter()
 				.subtract(carrier.getBoundingBox().getCenter());
@@ -1685,7 +1677,7 @@ public final class ArmorCombatController {
 				ArmorCombatPhase.FIRING, false, now,
 				ultimate ? 10 : ArmorCombatTuning.BLADE_SLASH_FIRING_TICKS));
 		broadcastCarrierFx(carrier, owner, new ArmorAttackFxPayload(
-				carrier.getUUID(), carrier.level().dimension().location(), attackId, 0,
+				carrier.getUUID(), carrier.level().dimension().identifier(), attackId, 0,
 				ArmorAttackType.ENERGY_BLADE_SLASH, variant, false,
 				origin, endpoint, visualEndpoint, normal, ArmorAttackHitKind.ENTITY,
 				target.getId(), strength, carrier.isEyeInFluid(FluidTags.WATER)));
@@ -1711,7 +1703,7 @@ public final class ArmorCombatController {
 
 		ArmorCombatState state = cruiseStateFor(owner, carrier);
 		if (state == null) return CruiseWeaponResult.missed();
-		long now = combatTime(owner.getServer());
+		long now = combatTime(owner.level().getServer());
 		if (!cruiseStateReady(carrier, state, now, state.cruiseSlamCooldownUntilTick,
 				ArmorCombatTuning.CRUISE_SLAM_ENERGY_COST)) {
 			return CruiseWeaponResult.missed();
@@ -1738,7 +1730,7 @@ public final class ArmorCombatController {
 				ArmorCombatPhase.FIRING, false, now,
 				ArmorCombatTuning.CRUISE_SLAM_FIRING_TICKS));
 		broadcastCarrierFx(carrier, owner, new ArmorAttackFxPayload(
-				carrier.getUUID(), carrier.level().dimension().location(), attackId, 0,
+				carrier.getUUID(), carrier.level().dimension().identifier(), attackId, 0,
 				ArmorAttackType.CRUISE_GROUND_SLAM, variant, false,
 				impact, impact, impact.add(0.0D, Math.max(3.0D, radius * 0.72D), 0.0D),
 				new Vec3(0.0D, 1.0D, 0.0D), ArmorAttackHitKind.BLOCK,
@@ -1815,7 +1807,7 @@ public final class ArmorCombatController {
 		float energyCost = eligible.size() * ArmorCombatTuning.CRUISE_MISSILE_ENERGY_PER_TARGET;
 		ArmorCombatState state = cruiseStateFor(owner, carrier);
 		if (state == null) return CruiseWeaponResult.missed();
-		long now = combatTime(owner.getServer());
+		long now = combatTime(owner.level().getServer());
 		if (!cruiseStateReady(carrier, state, now, state.wristCooldownUntilTick, energyCost)) {
 			return CruiseWeaponResult.missed();
 		}
@@ -1841,7 +1833,7 @@ public final class ArmorCombatController {
 					attackId, index, damage, origin);
 			carrierLevel.addFreshEntity(missile);
 			broadcastCarrierFx(carrier, owner, new ArmorAttackFxPayload(
-					carrier.getUUID(), carrier.level().dimension().location(), attackId, index,
+					carrier.getUUID(), carrier.level().dimension().identifier(), attackId, index,
 					ArmorAttackType.CRUISE_MISSILE_VOLLEY, variant, false,
 					origin, endpoint, endpoint, normal, ArmorAttackHitKind.MISS,
 					target.getId(), Mth.clamp(flightTicks / 20.0F, 0.0F, 1.0F), false));
@@ -1874,7 +1866,7 @@ public final class ArmorCombatController {
 		float energyCost = missileCount * ArmorCombatTuning.CRUISE_MISSILE_ENERGY_PER_TARGET;
 		ArmorCombatState state = cruiseStateFor(owner, carrier);
 		if (state == null) return CruiseWeaponResult.missed();
-		long now = combatTime(owner.getServer());
+		long now = combatTime(owner.level().getServer());
 		if (!cruiseStateReady(carrier, state, now, state.wristCooldownUntilTick, energyCost)) {
 			return CruiseWeaponResult.missed();
 		}
@@ -1899,7 +1891,7 @@ public final class ArmorCombatController {
 					attackId, index, damage, origin);
 			carrierLevel.addFreshEntity(missile);
 			broadcastCarrierFx(carrier, owner, new ArmorAttackFxPayload(
-					carrier.getUUID(), carrier.level().dimension().location(), attackId, index,
+					carrier.getUUID(), carrier.level().dimension().identifier(), attackId, index,
 					ArmorAttackType.CRUISE_MISSILE_VOLLEY, variant, false,
 					origin, endpoint, endpoint, normal, ArmorAttackHitKind.MISS,
 					target.getId(), Mth.clamp(flightTicks / 20.0F, 0.0F, 1.0F), false));
@@ -1966,7 +1958,7 @@ public final class ArmorCombatController {
 		if (!(missile.level() instanceof ServerLevel level) || owner == null) return;
 		Entity carrier = missile.carrierId() == null ? null : level.getEntity(missile.carrierId());
 		ArmorAttackFxPayload payload = new ArmorAttackFxPayload(
-				missile.carrierId(), level.dimension().location(), missile.attackId(),
+				missile.carrierId(), level.dimension().identifier(), missile.attackId(),
 				1024 + missile.missileIndex(), ArmorAttackType.CRUISE_MISSILE_VOLLEY,
 				ArmorVariant.SWIFT, false, missile.launchOrigin(), impact, impact, normal,
 				hitKind, hitEntityId, 1.0F, false);
@@ -1995,7 +1987,7 @@ public final class ArmorCombatController {
 				|| carrier.isRemoved() || !carrier.isAlive()) return;
 		ArmorCombatState state = cruiseStateFor(owner, carrier);
 		if (state == null) return;
-		long now = combatTime(owner.getServer());
+		long now = combatTime(owner.level().getServer());
 		if (state.phase == ArmorCombatPhase.CHARGING) return;
 		if (state.lastFireTick != Long.MIN_VALUE
 				&& now - state.lastFireTick < ArmorCombatTuning.PASSIVE_RECOVERY_DELAY_TICKS) {
@@ -2033,9 +2025,9 @@ public final class ArmorCombatController {
 				variant, charge, false).enabled();
 		if (!nativeExplosion && target != null
 				&& CombatTargetPolicy.canDamage(player, target)) {
-			boolean hurt = target.hurt(ModDamageTypes.gravityPulse(player), damage);
+			boolean hurt = target.hurtOrSimulate(ModDamageTypes.gravityPulse(player), damage);
 			if (hurt && target instanceof LivingEntity living) {
-				living.knockback(knockback, player.getX() - living.getX(), player.getZ() - living.getZ());
+				living.knockback(knockback, player.getX() - living.getX(), player.getZ() - living.getZ(), null, 0.0F);
 			}
 		}
 		List<ArmorVariantAttackResolver.VisualSegment> chainSegments =
@@ -2061,14 +2053,14 @@ public final class ArmorCombatController {
 
 		broadcastVisual(player, visualPayload(player, state, now));
 		broadcastFx(player, new ArmorAttackFxPayload(
-				player.getUUID(), player.level().dimension().location(), attackId, 0,
+				player.getUUID(), player.level().dimension().identifier(), attackId, 0,
 				ArmorAttackType.WRIST_GRAVITY_PULSE, variant, leftHand,
 				hit.origin(), hit.endpoint(), hit.impactNormal(), hit.hitKind(),
 				target == null ? ArmorAttackFxPayload.NO_ENTITY_ID : target.getId(), charge, underwater));
 		int chainEventIndex = 1;
 		for (ArmorVariantAttackResolver.VisualSegment segment : chainSegments) {
 			broadcastFx(player, new ArmorAttackFxPayload(
-					player.getUUID(), player.level().dimension().location(), attackId,
+					player.getUUID(), player.level().dimension().identifier(), attackId,
 					chainEventIndex++, ArmorAttackType.WRIST_GRAVITY_PULSE, variant, leftHand,
 					segment.origin(), segment.endpoint(), new Vec3(0.0D, 1.0D, 0.0D),
 					ArmorAttackHitKind.ENTITY, ArmorAttackFxPayload.NO_ENTITY_ID, charge, underwater));
@@ -2236,7 +2228,7 @@ public final class ArmorCombatController {
 
 	private static void broadcastFx(ServerPlayer attacker, ArmorAttackFxPayload payload) {
 		Set<ServerPlayer> recipients = new HashSet<>(PlayerLookup.tracking(attacker));
-		recipients.addAll(PlayerLookup.around(attacker.serverLevel(), payload.endpoint(), 48.0D));
+		recipients.addAll(PlayerLookup.around(attacker.level(), payload.endpoint(), 48.0D));
 		recipients.add(attacker);
 		for (ServerPlayer recipient : recipients) {
 			if (ServerPlayNetworking.canSend(recipient, ArmorAttackFxPayload.TYPE)) {
@@ -2302,10 +2294,10 @@ public final class ArmorCombatController {
 
 	private static ArmorCombatState loadPersistentState(ServerPlayer player) {
 		ArmorCombatState state = new ArmorCombatState(player.level().dimension());
-		ArmorCombatSavedData.Entry saved = ArmorCombatSavedData.find(player.getServer(), player.getUUID());
+		ArmorCombatSavedData.Entry saved = ArmorCombatSavedData.find(player.level().getServer(), player.getUUID());
 		if (saved == null) return state;
 
-		long now = combatTime(player.getServer());
+		long now = combatTime(player.level().getServer());
 		state.energy = Mth.clamp(saved.energy(), 0.0F, ArmorCombatTuning.MAX_ENERGY);
 		state.heat = Mth.clamp(saved.heat(), 0.0F, ArmorCombatTuning.MAX_HEAT);
 		state.overheated = saved.overheated();
@@ -2343,7 +2335,7 @@ public final class ArmorCombatController {
 
 		ArmorCombatSavedData.Entry entry = persistentEntry(state, now);
 		if (force) {
-			ArmorCombatSavedData.flush(player.getServer(), player.getUUID(), entry);
+			ArmorCombatSavedData.flush(player.level().getServer(), player.getUUID(), entry);
 			state.persistenceDirty = false;
 			state.lastPersistenceDirtyGameTime = now;
 			return;
@@ -2351,7 +2343,7 @@ public final class ArmorCombatController {
 
 		boolean markDirty = state.lastPersistenceDirtyGameTime == Long.MIN_VALUE
 				|| now - state.lastPersistenceDirtyGameTime >= PERSISTENCE_DIRTY_INTERVAL_TICKS;
-		ArmorCombatSavedData.update(player.getServer(), player.getUUID(), entry, markDirty);
+		ArmorCombatSavedData.update(player.level().getServer(), player.getUUID(), entry, markDirty);
 		if (markDirty) {
 			state.persistenceDirty = false;
 			state.lastPersistenceDirtyGameTime = now;

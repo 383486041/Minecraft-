@@ -67,9 +67,9 @@ public final class ArmorSuitPanelController {
 	public static void initialize() {
 		if (initialized) return;
 		initialized = true;
-		PayloadTypeRegistry.playC2S().register(
+		PayloadTypeRegistry.serverboundPlay().register(
 				ArmorSuitPanelActionPayload.TYPE, ArmorSuitPanelActionPayload.STREAM_CODEC);
-		PayloadTypeRegistry.playS2C().register(
+		PayloadTypeRegistry.clientboundPlay().register(
 				ArmorSuitPanelSnapshotPayload.TYPE, ArmorSuitPanelSnapshotPayload.STREAM_CODEC);
 		ServerPlayNetworking.registerGlobalReceiver(
 				ArmorSuitPanelActionPayload.TYPE,
@@ -82,7 +82,7 @@ public final class ArmorSuitPanelController {
 		UseEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
 			SubjectKind kind = subjectKind(entity);
 			if (kind == null) return InteractionResult.PASS;
-			if (!world.isClientSide
+			if (!world.isClientSide()
 					&& player instanceof ServerPlayer serverPlayer
 					&& entity instanceof ArmorStand stand) {
 				openCarrier(serverPlayer, stand, kind);
@@ -95,12 +95,12 @@ public final class ArmorSuitPanelController {
 		if (viewer == null || platform == null || !viewer.isAlive() || viewer.isSpectator()) return;
 		if (!(platform.getLevel() instanceof ServerLevel level)
 				|| viewer.level() != level
-				|| viewer.distanceToSqr(platform.getBlockPos().getCenter())
+				|| viewer.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(platform.getBlockPos()))
 				> PANEL_OPEN_DISTANCE_SQR) return;
 		UUID ownerId = platform.getOwnerUuid().orElse(null);
 		UUID suitId = platform.getSuitId().orElse(null);
 		if (ownerId == null || suitId == null || !platform.isComplete()) {
-			viewer.displayClientMessage(Component.literal("平台中没有可识别的完整战甲"), true);
+			viewer.sendOverlayMessage(Component.literal("平台中没有可识别的完整战甲"));
 			return;
 		}
 		ArmorVariant variant = platform.getArmorItems().stream()
@@ -121,7 +121,7 @@ public final class ArmorSuitPanelController {
 				|| viewer.distanceToSqr(carrier) > PANEL_OPEN_DISTANCE_SQR) return;
 		SuitIdentity identity = readSuitIdentity(carrier).orElse(null);
 		if (identity == null) {
-			viewer.displayClientMessage(Component.literal("无法读取这套战甲的完整身份"), true);
+			viewer.sendOverlayMessage(Component.literal("无法读取这套战甲的完整身份"));
 			return;
 		}
 		PanelSession session = PanelSession.carrier(
@@ -136,18 +136,18 @@ public final class ArmorSuitPanelController {
 	private static void handleAction(ServerPlayer viewer, ArmorSuitPanelActionPayload payload) {
 		PanelSession session = SESSIONS.get(viewer.getUUID());
 		if (session == null || session.token() != payload.sessionId()
-				|| viewer.serverLevel().getGameTime() > session.expiresAt()) {
+				|| viewer.level().getGameTime() > session.expiresAt()) {
 			SESSIONS.remove(viewer.getUUID());
-			viewer.displayClientMessage(
-					Component.literal("战甲状态面板已过期，请重新右键目标"), true);
+			viewer.sendOverlayMessage(
+					Component.literal("战甲状态面板已过期，请重新右键目标"));
 			return;
 		}
 
 		ResolvedTarget target = resolve(viewer, session);
 		if (target == null) {
 			SESSIONS.remove(viewer.getUUID());
-			viewer.displayClientMessage(
-					Component.literal("目标已离开控制距离，或战甲身份已经变化"), true);
+			viewer.sendOverlayMessage(
+					Component.literal("目标已离开控制距离，或战甲身份已经变化"));
 			return;
 		}
 
@@ -220,7 +220,7 @@ public final class ArmorSuitPanelController {
 		}
 
 		if (outcome.closePanel()) {
-			viewer.displayClientMessage(Component.literal(outcome.message()), true);
+			viewer.sendOverlayMessage(Component.literal(outcome.message()));
 			sendSnapshot(viewer, session, target, outcome.message(), false, true);
 			SESSIONS.remove(viewer.getUUID(), session);
 		} else {
@@ -280,7 +280,7 @@ public final class ArmorSuitPanelController {
 		boolean ownerView = session.ownerId().equals(viewer.getUUID());
 		ServerPlayer stateOwner = ownerView
 				? viewer
-				: viewer.getServer().getPlayerList().getPlayer(session.ownerId());
+				: viewer.level().getServer().getPlayerList().getPlayer(session.ownerId());
 		SuitRuntimeSnapshot.SuitState runtimeState = stateOwner == null
 				? null
 				: runtimeState(stateOwner, session.suitId()).orElse(null);
@@ -315,7 +315,7 @@ public final class ArmorSuitPanelController {
 		boolean following = session.kind() != SubjectKind.PLATFORM
 				&& ArmorRemoteCommandController.isFollowing(session.ownerId(), session.suitId());
 		String integrity = ArmorIntegrityController.statusText(
-				viewer.getServer(), session.ownerId(), session.suitId());
+				viewer.level().getServer(), session.ownerId(), session.suitId());
 		if (target.platform() != null && target.platform().isIntegrityRepairing()) {
 			integrity += " · 平台维护中";
 		}
@@ -498,13 +498,13 @@ public final class ArmorSuitPanelController {
 		BlockPos pos = target.platform() != null
 				? target.platform().getBlockPos()
 				: target.carrier().blockPosition();
-		return session.dimension().location() + " · "
+		return session.dimension().identifier() + " · "
 				+ pos.getX() + ", " + pos.getY() + ", " + pos.getZ();
 	}
 
 	private static String distanceText(ServerPlayer viewer, ResolvedTarget target) {
 		double blocks = target.platform() != null
-				? Math.sqrt(viewer.distanceToSqr(target.platform().getBlockPos().getCenter()))
+				? Math.sqrt(viewer.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(target.platform().getBlockPos())))
 				: Math.sqrt(viewer.distanceToSqr(target.carrier()));
 		return String.format(Locale.ROOT, "%.1f 格 / %.1f 米", blocks, blocks * 2.0D);
 	}
@@ -544,10 +544,10 @@ public final class ArmorSuitPanelController {
 	}
 
 	private static ResolvedTarget resolve(ServerPlayer viewer, PanelSession session) {
-		ServerLevel level = viewer.getServer().getLevel(session.dimension());
+		ServerLevel level = viewer.level().getServer().getLevel(session.dimension());
 		if (level == null || viewer.level() != level) return null;
 		if (session.kind() == SubjectKind.PLATFORM) {
-			if (viewer.distanceToSqr(session.platformPos().getCenter())
+			if (viewer.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(session.platformPos()))
 					> PANEL_OPEN_DISTANCE_SQR
 					|| !(level.getBlockEntity(session.platformPos())
 					instanceof ChargingPlatformBlockEntity platform)
@@ -636,14 +636,14 @@ public final class ArmorSuitPanelController {
 	}
 
 	private static String ownerName(ServerPlayer viewer, UUID ownerId) {
-		ServerPlayer online = viewer.getServer().getPlayerList().getPlayer(ownerId);
+		ServerPlayer online = viewer.level().getServer().getPlayerList().getPlayer(ownerId);
 		return online != null
-				? online.getGameProfile().getName()
+				? online.getGameProfile().name()
 				: ownerId.toString().substring(0, 8);
 	}
 
 	private static long expiresAt(ServerPlayer viewer) {
-		return viewer.serverLevel().getGameTime() + SESSION_TTL_TICKS;
+		return viewer.level().getGameTime() + SESSION_TTL_TICKS;
 	}
 
 	private record SuitIdentity(UUID ownerId, UUID suitId, ArmorVariant variant) {

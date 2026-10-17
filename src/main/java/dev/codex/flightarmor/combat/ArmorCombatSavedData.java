@@ -1,13 +1,14 @@
 package dev.codex.flightarmor.combat;
 
-import net.minecraft.core.HolderLookup;
+import dev.codex.flightarmor.FlightArmorMod;
+import dev.codex.flightarmor.util.TagUtils;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.Mth;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -24,16 +25,17 @@ final class ArmorCombatSavedData extends SavedData {
 	private static final String DATA_NAME = "flight_armor_combat_resources";
 	private static final int DATA_VERSION = 3;
 	private static final int LEGACY_PERCENT_ENERGY_MAX_VERSION = 2;
-	private static final SavedData.Factory<ArmorCombatSavedData> FACTORY = new SavedData.Factory<>(
+	private static final SavedDataType<ArmorCombatSavedData> TYPE = new SavedDataType<>(
+			FlightArmorMod.id(DATA_NAME),
 			ArmorCombatSavedData::new,
-			ArmorCombatSavedData::load,
+			CompoundTag.CODEC.xmap(ArmorCombatSavedData::load, data -> data.save(new CompoundTag())),
 			DataFixTypes.LEVEL);
 
 	private final Map<UUID, Entry> entries = new HashMap<>();
 
 	static ArmorCombatSavedData get(MinecraftServer server) {
 		// 所有维度共用主世界数据存储，冷却时钟也统一使用主世界 gameTime。
-		return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+		return server.overworld().getDataStorage().computeIfAbsent(TYPE);
 	}
 
 	static Entry find(MinecraftServer server, UUID ownerId) {
@@ -60,25 +62,25 @@ final class ArmorCombatSavedData extends SavedData {
 		data.setDirty();
 	}
 
-	private static ArmorCombatSavedData load(CompoundTag root, HolderLookup.Provider registries) {
+	private static ArmorCombatSavedData load(CompoundTag root) {
 		ArmorCombatSavedData data = new ArmorCombatSavedData();
-		int storedVersion = root.getInt("Version");
-		ListTag players = root.getList("Players", Tag.TAG_COMPOUND);
+		int storedVersion = root.getIntOr("Version", 0);
+		ListTag players = root.getListOrEmpty("Players");
 		for (int index = 0; index < players.size(); index++) {
-			CompoundTag tag = players.getCompound(index);
+			CompoundTag tag = players.getCompoundOrEmpty(index);
 			try {
-				UUID ownerId = tag.getUUID("Owner");
-				float storedEnergy = tag.getFloat("Energy");
+				UUID ownerId = TagUtils.getUUID(tag, "Owner");
+				float storedEnergy = tag.getFloatOr("Energy", 0.0F);
 				// v1/v2 使用 100 点上限；升级时保持原来的百分比，避免满能核心只剩 1%。
 				float energy = storedVersion <= LEGACY_PERCENT_ENERGY_MAX_VERSION ? Mth.clamp(storedEnergy / 100.0F, 0.0F, 1.0F)
 						* ArmorCombatTuning.MAX_ENERGY : Mth.clamp(storedEnergy, 0.0F, ArmorCombatTuning.MAX_ENERGY);
-				float heat = Mth.clamp(tag.getFloat("Heat"), 0.0F, ArmorCombatTuning.MAX_HEAT);
-				boolean overheated = tag.getBoolean("Overheated");
-				long wristCooldownRemaining = Math.max(0L, tag.getLong("WristCooldownRemaining"));
-				long coreCooldownRemaining = Math.max(0L, tag.getLong("CoreCooldownRemaining"));
-				long diveImpactCooldownRemaining = Math.max(0L, tag.getLong("DiveImpactCooldownRemaining"));
-				long recoveryDelayRemaining = Math.max(0L, tag.getLong("RecoveryDelayRemaining"));
-				boolean nextLeftHand = tag.getBoolean("NextLeftHand");
+				float heat = Mth.clamp(tag.getFloatOr("Heat", 0.0F), 0.0F, ArmorCombatTuning.MAX_HEAT);
+				boolean overheated = tag.getBooleanOr("Overheated", false);
+				long wristCooldownRemaining = Math.max(0L, tag.getLongOr("WristCooldownRemaining", 0L));
+				long coreCooldownRemaining = Math.max(0L, tag.getLongOr("CoreCooldownRemaining", 0L));
+				long diveImpactCooldownRemaining = Math.max(0L, tag.getLongOr("DiveImpactCooldownRemaining", 0L));
+				long recoveryDelayRemaining = Math.max(0L, tag.getLongOr("RecoveryDelayRemaining", 0L));
+				boolean nextLeftHand = tag.getBooleanOr("NextLeftHand", false);
 				data.entries.put(ownerId, new Entry(
 						energy, heat, overheated, wristCooldownRemaining,
 						coreCooldownRemaining, diveImpactCooldownRemaining,
@@ -91,14 +93,13 @@ final class ArmorCombatSavedData extends SavedData {
 		return data;
 	}
 
-	@Override
-	public CompoundTag save(CompoundTag root, HolderLookup.Provider registries) {
+	public CompoundTag save(CompoundTag root) {
 		root.putInt("Version", DATA_VERSION);
 		ListTag players = new ListTag();
 		for (Map.Entry<UUID, Entry> mapEntry : entries.entrySet()) {
 			Entry entry = mapEntry.getValue();
 			CompoundTag tag = new CompoundTag();
-			tag.putUUID("Owner", mapEntry.getKey());
+			TagUtils.putUUID(tag, "Owner", mapEntry.getKey());
 			tag.putFloat("Energy", entry.energy());
 			tag.putFloat("Heat", entry.heat());
 			tag.putBoolean("Overheated", entry.overheated());

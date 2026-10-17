@@ -45,10 +45,10 @@ public final class ArmorVariantData {
 	}
 
 	private static Optional<ArmorVariant> parseExplicit(CompoundTag customRoot) {
-		if (!customRoot.contains(ROOT_KEY, CompoundTag.TAG_COMPOUND)) return Optional.empty();
-		CompoundTag variantRoot = customRoot.getCompound(ROOT_KEY);
-		if (variantRoot.getInt(VERSION_KEY) != FORMAT_VERSION) return Optional.empty();
-		return ArmorVariant.find(variantRoot.getString(VARIANT_KEY));
+		if (!customRoot.contains(ROOT_KEY)) return Optional.empty();
+		CompoundTag variantRoot = customRoot.getCompoundOrEmpty(ROOT_KEY);
+		if (variantRoot.getIntOr(VERSION_KEY, 0) != FORMAT_VERSION) return Optional.empty();
+		return ArmorVariant.find(variantRoot.getStringOr(VARIANT_KEY, ""));
 	}
 
 	/**

@@ -75,8 +75,8 @@ public final class ArmorCruiseController {
 	private static final double PHASING_REENTRY_DISTANCE = 24.0D;
 	/** radius=2 会生成 level 31 的区域票据，保证载体所在区块持续进行实体 tick。 */
 	private static final int CARRIER_TICKET_RADIUS = 2;
-	private static final TicketType<UUID> CARRIER_TICKET =
-			TicketType.create("flight_armor_cruise", UUID::compareTo);
+	private static final TicketType CARRIER_TICKET =
+			new TicketType(0L, TicketType.FLAG_LOADING | TicketType.FLAG_SIMULATION);
 	private static final AtomicLong NEXT_SEQUENCE_ID = new AtomicLong();
 	private static final AtomicLong NEXT_EMERGENCY_RECALL_ATTEMPT_ID = new AtomicLong();
 	private static final double EMERGENCY_DESCENT_SPEED = -0.35D;
@@ -112,7 +112,7 @@ public final class ArmorCruiseController {
 			deny(player, "当前状态无法切换战甲巡航");
 			return;
 		}
-		long requestTick = player.getServer().overworld().getGameTime();
+		long requestTick = player.level().getServer().overworld().getGameTime();
 		Long previousRequestTick = LAST_B_REQUEST_TICKS.get(player.getUUID());
 		if (previousRequestTick != null && requestTick >= previousRequestTick
 				&& requestTick - previousRequestTick < B_REQUEST_COOLDOWN_TICKS) {
@@ -173,9 +173,9 @@ public final class ArmorCruiseController {
 
 		CruiseState state = STATES.get(player.getUUID());
 		if (state == null) {
-			ArmorCruiseSavedData.Locator locator = ArmorCruiseSavedData.find(player.getServer(), player.getUUID());
+			ArmorCruiseSavedData.Locator locator = ArmorCruiseSavedData.find(player.level().getServer(), player.getUUID());
 			if (locator != null) {
-				restoreIndexedCarrier(player.getServer(), locator, player);
+				restoreIndexedCarrier(player.level().getServer(), locator, player);
 				state = STATES.get(player.getUUID());
 				if (state == null) {
 					deny(player, "检测到尚未完成恢复的战甲载体；为防重复创建，本次操作已拒绝");
@@ -244,7 +244,7 @@ public final class ArmorCruiseController {
 				ArmorCoreController.runtimeView(player).bindings()) {
 			if (binding.suitId() != null
 					&& ArmorEscortController.hasRecoverableSuit(
-							player.getServer(), binding.suitId())) {
+							player.level().getServer(), binding.suitId())) {
 				suitIds.add(binding.suitId());
 			}
 		}
@@ -281,16 +281,16 @@ public final class ArmorCruiseController {
 			return false;
 		}
 		FlightPhysics.applyPreBootFallArrest(player);
-		player.hurtMarked = true;
+		player.syncVelocity = true;
 		broadcastPlatformRecall(player, result);
-		player.displayClientMessage(Component.literal("主战甲已从充能平台高速召回"), true);
+		player.sendOverlayMessage(Component.literal("主战甲已从充能平台高速召回"));
 		return true;
 	}
 
 	/** 查询该玩家是否仍有 owner 级独立巡航载体；调用方还必须按 suitId 判断关联性。 */
 	public static boolean hasActiveCruise(ServerPlayer player) {
 		return STATES.containsKey(player.getUUID())
-				|| ArmorCruiseSavedData.find(player.getServer(), player.getUUID()) != null;
+				|| ArmorCruiseSavedData.find(player.level().getServer(), player.getUUID()) != null;
 	}
 
 	/**
@@ -359,8 +359,8 @@ public final class ArmorCruiseController {
 				if (!result.success()) {
 					return WornDeploymentResult.failed(route, result.message());
 				}
-				player.displayClientMessage(Component.literal(
-						"当前战甲已脱离穿戴并加入护航巡航；原独立巡航甲保持不变"), true);
+				player.sendOverlayMessage(Component.literal(
+						"当前战甲已脱离穿戴并加入护航巡航；原独立巡航甲保持不变"));
 				return WornDeploymentResult.started(route);
 			}
 			case REJECT_DUPLICATE_PHYSICAL_STATE -> {
@@ -399,7 +399,7 @@ public final class ArmorCruiseController {
 					state.sequenceId, state.phaseStartGameTime, true));
 		}
 		ArmorCruiseSavedData.Locator locator =
-				ArmorCruiseSavedData.find(player.getServer(), player.getUUID());
+				ArmorCruiseSavedData.find(player.level().getServer(), player.getUUID());
 		if (locator == null) return Optional.empty();
 		return Optional.of(new CruiseRuntimeView(locator.suitId(), locator.phase(), locator.dimension(),
 				locator.anchor(), locator.carrierId(), locator.sequenceId(), 0L, false));
@@ -474,9 +474,9 @@ public final class ArmorCruiseController {
 		}
 		releaseCarrierTicket(state);
 		ArmorCruiseCombatController.cancelByOwnerId(player.getUUID());
-		ArmorCruiseSavedData.removeIfMatches(player.getServer(), player.getUUID(),
+		ArmorCruiseSavedData.removeIfMatches(player.level().getServer(), player.getUUID(),
 				state.carrier.getUUID(), state.sequenceId);
-		broadcast(player.getServer(), idlePayload(player.getUUID(), state));
+		broadcast(player.level().getServer(), idlePayload(player.getUUID(), state));
 		return RecallCommandResult.started();
 	}
 
@@ -498,7 +498,7 @@ public final class ArmorCruiseController {
 		if (state == null) {
 			return RecallCommandResult.failed("目标战甲当前不是活动独立巡航载体");
 		}
-		ServerLevel home = player.getServer().getLevel(dimension);
+		ServerLevel home = player.level().getServer().getLevel(dimension);
 		ChargingPlatformBlockEntity platform = null;
 		if (home != null) {
 			home.getChunkAt(pos);
@@ -537,7 +537,7 @@ public final class ArmorCruiseController {
 			if (STATES.putIfAbsent(player.getUUID(), state) == null) {
 				updateCarrierTicket(state);
 				syncLocator(state);
-				broadcast(player.getServer(), state.toPayload(player.getUUID()));
+				broadcast(player.level().getServer(), state.toPayload(player.getUUID()));
 			} else {
 				FlightArmorMod.LOGGER.error(
 						"独立巡航返台回滚状态冲突 owner={} suit={} carrier={}",
@@ -550,9 +550,9 @@ public final class ArmorCruiseController {
 		releaseCarrierTicket(state);
 		ArmorCruiseCombatController.cancel(player, "return_platform_handoff");
 		ArmorCruiseCombatController.cancelByOwnerId(player.getUUID());
-		ArmorCruiseSavedData.removeIfMatches(player.getServer(), player.getUUID(),
+		ArmorCruiseSavedData.removeIfMatches(player.level().getServer(), player.getUUID(),
 				state.carrier.getUUID(), state.sequenceId);
-		broadcast(player.getServer(), idlePayload(player.getUUID(), state));
+		broadcast(player.level().getServer(), idlePayload(player.getUUID(), state));
 		return RecallCommandResult.started();
 	}
 
@@ -576,9 +576,9 @@ public final class ArmorCruiseController {
 		CruiseState state = STATES.get(player.getUUID());
 		if (state != null) return state;
 		ArmorCruiseSavedData.Locator locator =
-				ArmorCruiseSavedData.find(player.getServer(), player.getUUID());
+				ArmorCruiseSavedData.find(player.level().getServer(), player.getUUID());
 		if (locator == null) return null;
-		restoreIndexedCarrier(player.getServer(), locator, player);
+		restoreIndexedCarrier(player.level().getServer(), locator, player);
 		return STATES.get(player.getUUID());
 	}
 	/** True while this owner's independent carrier still uniquely holds the requested suit. */
@@ -639,7 +639,7 @@ public final class ArmorCruiseController {
 			if (state.needsOwnerSync) {
 				state.needsOwnerSync = false;
 				if (state.phase == ArmorCruisePhase.OWNER_DOWN && player.isAlive()) {
-					state.respawnResumeGameTime = player.serverLevel().getGameTime() + 1L;
+					state.respawnResumeGameTime = player.level().getGameTime() + 1L;
 				}
 				broadcast(server, state.toPayload(player.getUUID()));
 			}
@@ -660,7 +660,7 @@ public final class ArmorCruiseController {
 					ArmorIntegrityController.tickDisabledCarrier(state.carrier);
 					updateCarrierTicket(state);
 				} else {
-					tickOwnerDown(state, player.serverLevel().getGameTime());
+					tickOwnerDown(state, player.level().getGameTime());
 				}
 				continue;
 			}
@@ -675,12 +675,12 @@ public final class ArmorCruiseController {
 			if (ArmorIntegrityController.isDisabled(state.carrier)
 					&& state.phase == ArmorCruisePhase.DEPLOYING) {
 				ArmorIntegrityController.tickDisabledCarrier(state.carrier);
-				tickDeploying(player, state, player.serverLevel().getGameTime());
+				tickDeploying(player, state, player.level().getGameTime());
 				continue;
 			}
 			switch (state.phase) {
-				case DEPLOYING -> tickDeploying(player, state, player.serverLevel().getGameTime());
-				case CRUISING -> tickCruising(player, state, player.serverLevel().getGameTime());
+				case DEPLOYING -> tickDeploying(player, state, player.level().getGameTime());
+				case CRUISING -> tickCruising(player, state, player.level().getGameTime());
 				case RECALLING -> tickRecalling(player, state);
 				case PHASING -> tickPhasing(player, state);
 				case OWNER_DOWN -> tickOwnerDown(player, state);
@@ -701,8 +701,8 @@ public final class ArmorCruiseController {
 		PlatformRecallSnapshot snapshot = PLATFORM_RECALL_SNAPSHOTS.get(trackedPlayer.getUUID());
 		if (snapshot == null) return;
 		ArmorPlatformRecallPayload base = snapshot.payload();
-		long elapsed = Math.max(0L, trackedPlayer.serverLevel().getGameTime() - base.startGameTime());
-		boolean wrongDimension = !trackedPlayer.level().dimension().location()
+		long elapsed = Math.max(0L, trackedPlayer.level().getGameTime() - base.startGameTime());
+		boolean wrongDimension = !trackedPlayer.level().dimension().identifier()
 				.equals(snapshot.targetDimension());
 		if (wrongDimension || elapsed > ArmorPlatformRecallPayload.EXPIRY_TICKS) {
 			PLATFORM_RECALL_SNAPSHOTS.remove(trackedPlayer.getUUID(), snapshot);
@@ -760,13 +760,13 @@ public final class ArmorCruiseController {
 		if (present != null) {
 			present.needsOwnerSync = true;
 			if (present.phase == ArmorCruisePhase.OWNER_DOWN) {
-				present.respawnResumeGameTime = player.serverLevel().getGameTime() + 1L;
+				present.respawnResumeGameTime = player.level().getGameTime() + 1L;
 			}
 			return;
 		}
-		ArmorCruiseSavedData.Locator locator = ArmorCruiseSavedData.find(player.getServer(), player.getUUID());
+		ArmorCruiseSavedData.Locator locator = ArmorCruiseSavedData.find(player.level().getServer(), player.getUUID());
 		if (locator != null) {
-			restoreIndexedCarrier(player.getServer(), locator, player);
+			restoreIndexedCarrier(player.level().getServer(), locator, player);
 		}
 	}
 
@@ -778,7 +778,7 @@ public final class ArmorCruiseController {
 		}
 		if (state.phase == ArmorCruisePhase.OWNER_DOWN) {
 			state.respawnResumeGameTime = Math.max(state.respawnResumeGameTime,
-					player.serverLevel().getGameTime() + 1L);
+					player.level().getGameTime() + 1L);
 			return;
 		}
 		beginPhasing(player, state, "玩家维度变化");
@@ -809,10 +809,10 @@ public final class ArmorCruiseController {
 	public static void captureWornSetForDeath(ServerPlayer player) {
 		CruiseState active = STATES.get(player.getUUID());
 		ArmorCruiseSavedData.Locator locator =
-				ArmorCruiseSavedData.find(player.getServer(), player.getUUID());
+				ArmorCruiseSavedData.find(player.level().getServer(), player.getUUID());
 		if (active == null) {
 			if (locator != null) {
-				restoreIndexedCarrier(player.getServer(), locator, player);
+				restoreIndexedCarrier(player.level().getServer(), locator, player);
 				active = STATES.get(player.getUUID());
 				if (active == null) {
 					FlightArmorMod.LOGGER.error(
@@ -886,17 +886,17 @@ public final class ArmorCruiseController {
 		}
 		UUID ownerId = player.getUUID();
 		UUID suitId = ownership.suitId();
-		if (!ChargingPlatformController.ensureSuitCruising(player.getServer(), ownerId, suitId)) {
+		if (!ChargingPlatformController.ensureSuitCruising(player.level().getServer(), ownerId, suitId)) {
 			FlightArmorMod.LOGGER.error("Death rescue ledger transition failed owner={} suit={}", ownerId, suitId);
 			return;
 		}
-		double safeX = Mth.clamp(player.getX(), player.serverLevel().getWorldBorder().getMinX() + 1.0D,
-				player.serverLevel().getWorldBorder().getMaxX() - 1.0D);
+		double safeX = Mth.clamp(player.getX(), player.level().getWorldBorder().getMinX() + 1.0D,
+				player.level().getWorldBorder().getMaxX() - 1.0D);
 		double safeY = Mth.clamp(player.getY() + 0.28D,
-				player.serverLevel().getMinBuildHeight() + 2.0D,
-				player.serverLevel().getMaxBuildHeight() - 3.0D);
-		double safeZ = Mth.clamp(player.getZ(), player.serverLevel().getWorldBorder().getMinZ() + 1.0D,
-				player.serverLevel().getWorldBorder().getMaxZ() - 1.0D);
+				player.level().getMinY() + 2.0D,
+				player.level().getMaxY() - 3.0D);
+		double safeZ = Mth.clamp(player.getZ(), player.level().getWorldBorder().getMinZ() + 1.0D,
+				player.level().getWorldBorder().getMaxZ() - 1.0D);
 		Vec3 position = new Vec3(safeX, safeY, safeZ);
 		ArmorStand carrier = new ArmorStand(player.level(), position.x, position.y, position.z);
 		configureCarrier(carrier, ownerId);
@@ -906,7 +906,7 @@ public final class ArmorCruiseController {
 		SPAWNING_CARRIERS.add(carrier.getUUID());
 		boolean spawned;
 		try {
-			spawned = player.serverLevel().addFreshEntity(carrier);
+			spawned = player.level().addFreshEntity(carrier);
 		} finally {
 			SPAWNING_CARRIERS.remove(carrier.getUUID());
 		}
@@ -933,7 +933,7 @@ public final class ArmorCruiseController {
 			return;
 		}
 
-		long now = player.serverLevel().getGameTime();
+		long now = player.level().getGameTime();
 		CruiseState state = new CruiseState(ownerId, NEXT_SEQUENCE_ID.incrementAndGet(),
 				ArmorCruisePhase.OWNER_DOWN, carrier, now, false, position);
 		state.ownerDownAnchor = position;
@@ -950,7 +950,7 @@ public final class ArmorCruiseController {
 		updateCarrierTicket(state);
 		player.getInventory().setChanged();
 		player.containerMenu.broadcastChanges();
-		broadcast(player.getServer(), state.toPayload(ownerId));
+		broadcast(player.level().getServer(), state.toPayload(ownerId));
 		FlightArmorMod.LOGGER.info("死亡前完整战甲已事务性接管 owner={} carrier={} position={}",
 				ownerId, carrier.getUUID(), position);
 	}
@@ -962,10 +962,10 @@ public final class ArmorCruiseController {
 			return;
 		}
 		state.needsOwnerSync = false;
-		state.respawnResumeGameTime = newPlayer.serverLevel().getGameTime() + 1L;
-		broadcast(newPlayer.getServer(), state.toPayload(newPlayer.getUUID()));
+		state.respawnResumeGameTime = newPlayer.level().getGameTime() + 1L;
+		broadcast(newPlayer.level().getServer(), state.toPayload(newPlayer.getUUID()));
 		if (!allArmorSlotsEmpty(newPlayer)) {
-			newPlayer.displayClientMessage(Component.literal("战甲已锁定重生信标；清空装甲槽后自动召回"), true);
+			newPlayer.sendOverlayMessage(Component.literal("战甲已锁定重生信标；清空装甲槽后自动召回"));
 		}
 	}
 
@@ -1021,7 +1021,7 @@ public final class ArmorCruiseController {
 		ServerLevel level = server.getLevel(locator.dimension());
 		if (level == null) {
 			FlightArmorMod.LOGGER.error("持久索引指向不存在的维度 owner={} dimension={}",
-					locator.ownerId(), locator.dimension().location());
+					locator.ownerId(), locator.dimension().identifier());
 			return false;
 		}
 		ChunkPos chunk = new ChunkPos(locator.chunkX(), locator.chunkZ());
@@ -1029,10 +1029,10 @@ public final class ArmorCruiseController {
 		boolean hadSameTicket = stateBeforeLoad != null && stateBeforeLoad.ticketLevel == level
 				&& chunk.equals(stateBeforeLoad.ticketChunk);
 		if (!hadSameTicket) {
-			level.getChunkSource().addRegionTicket(
-					CARRIER_TICKET, chunk, CARRIER_TICKET_RADIUS, locator.ownerId());
+			level.getChunkSource().addTicketWithRadius(
+					CARRIER_TICKET, chunk, CARRIER_TICKET_RADIUS);
 		}
-		level.getChunk(chunk.x, chunk.z);
+		level.getChunk(chunk.x(), chunk.z());
 		Entity entity = level.getEntity(locator.carrierId());
 		if (entity instanceof ArmorStand transferred && ArmorEscortController.isEscortCarrier(transferred)) {
 			UUID suitId = carrierSuitId(transferred).orElse(null);
@@ -1079,17 +1079,17 @@ public final class ArmorCruiseController {
 		state.ticketChunk = chunk;
 		if (oldTicketLevel != null && oldTicketChunk != null
 				&& (oldTicketLevel != level || !oldTicketChunk.equals(chunk))) {
-			oldTicketLevel.getChunkSource().removeRegionTicket(
-					CARRIER_TICKET, oldTicketChunk, CARRIER_TICKET_RADIUS, state.ownerId);
+			oldTicketLevel.getChunkSource().removeTicketWithRadius(
+					CARRIER_TICKET, oldTicketChunk, CARRIER_TICKET_RADIUS);
 		}
 		state.patrolAnchor = locator.anchor();
 		state.patrolLevel = level;
-		if (locator.phase() == ArmorCruisePhase.OWNER_DOWN || stand.getTags().contains(OWNER_DOWN_TAG)) {
+		if (locator.phase() == ArmorCruisePhase.OWNER_DOWN || stand.entityTags().contains(OWNER_DOWN_TAG)) {
 			state.phase = ArmorCruisePhase.OWNER_DOWN;
 			state.ownerDownAnchor = locator.anchor();
 			state.recoveringFromDeath = true;
 			state.respawnResumeGameTime = onlineOwner == null ? Long.MAX_VALUE
-					: onlineOwner.serverLevel().getGameTime() + 1L;
+					: onlineOwner.level().getGameTime() + 1L;
 			stand.addTag(OWNER_DOWN_TAG);
 		}
 		state.needsOwnerSync = onlineOwner != null;
@@ -1100,8 +1100,8 @@ public final class ArmorCruiseController {
 	private static void removeRestoreTicketIfAdded(ServerLevel level, ChunkPos chunk, UUID ownerId,
 			boolean hadSameTicket) {
 		if (!hadSameTicket) {
-			level.getChunkSource().removeRegionTicket(
-					CARRIER_TICKET, chunk, CARRIER_TICKET_RADIUS, ownerId);
+			level.getChunkSource().removeTicketWithRadius(
+					CARRIER_TICKET, chunk, CARRIER_TICKET_RADIUS);
 		}
 	}
 
@@ -1125,7 +1125,7 @@ public final class ArmorCruiseController {
 	}
 
 	public static boolean isCruiseCarrier(Entity entity) {
-		return entity instanceof ArmorStand && entity.getTags().contains(CARRIER_TAG);
+		return entity instanceof ArmorStand && entity.entityTags().contains(CARRIER_TAG);
 	}
 
 	private static WornDeploymentResult deployFromPlayer(ServerPlayer player, UUID suitId) {
@@ -1135,7 +1135,7 @@ public final class ArmorCruiseController {
 					WornSuitDeploymentPolicy.Route.REJECT_UNVERIFIED_INDEPENDENT_STATE,
 					"巡航状态正在切换，请稍候");
 		}
-		if (ArmorCruiseSavedData.find(player.getServer(), ownerId) != null) {
+		if (ArmorCruiseSavedData.find(player.level().getServer(), ownerId) != null) {
 			return WornDeploymentResult.failed(
 					WornSuitDeploymentPolicy.Route.REJECT_UNVERIFIED_INDEPENDENT_STATE,
 					"检测到待恢复的旧战甲载体；为防重复部署，本次操作已拒绝");
@@ -1151,7 +1151,7 @@ public final class ArmorCruiseController {
 		carrier.setYBodyRot(player.getYRot());
 		SPAWNING_CARRIERS.add(carrier.getUUID());
 		boolean spawned;
-		if (!ChargingPlatformController.ensureSuitCruising(player.getServer(), ownerId, suitId)) {
+		if (!ChargingPlatformController.ensureSuitCruising(player.level().getServer(), ownerId, suitId)) {
 			carrier.discard();
 			SPAWNING_CARRIERS.remove(carrier.getUUID());
 			return WornDeploymentResult.failed(
@@ -1160,7 +1160,7 @@ public final class ArmorCruiseController {
 		}
 
 		try {
-			spawned = player.serverLevel().addFreshEntity(carrier);
+			spawned = player.level().addFreshEntity(carrier);
 		} finally {
 			SPAWNING_CARRIERS.remove(carrier.getUUID());
 		}
@@ -1191,7 +1191,7 @@ public final class ArmorCruiseController {
 					"巡航部署失败，战甲已回滚");
 		}
 
-		long startGameTime = player.serverLevel().getGameTime();
+		long startGameTime = player.level().getGameTime();
 		CruiseState state = new CruiseState(
 				ownerId,
 				NEXT_SEQUENCE_ID.incrementAndGet(),
@@ -1213,8 +1213,8 @@ public final class ArmorCruiseController {
 
 		player.getInventory().setChanged();
 		player.containerMenu.broadcastChanges();
-		broadcast(player.getServer(), state.toPayload(ownerId));
-		player.displayClientMessage(Component.literal("战甲已进入独立巡航模式，再按 B 召回"), true);
+		broadcast(player.level().getServer(), state.toPayload(ownerId));
+		player.sendOverlayMessage(Component.literal("战甲已进入独立巡航模式，再按 B 召回"));
 		return WornDeploymentResult.started(
 				WornSuitDeploymentPolicy.Route.DEPLOY_AS_INDEPENDENT);
 	}
@@ -1242,7 +1242,7 @@ public final class ArmorCruiseController {
 
 	private static boolean isDangerousFall(ServerPlayer player) {
 		return player.isAlive() && !player.onGround() && !player.isPassenger()
-				&& !player.isSleeping() && !player.isInWaterOrBubble() && !player.isInLava()
+				&& !player.isSleeping() && !player.isInWater() && !player.isInLava()
 				&& (player.fallDistance >= EMERGENCY_FALL_DISTANCE
 				|| player.getDeltaMovement().y <= EMERGENCY_DESCENT_SPEED);
 	}
@@ -1270,16 +1270,16 @@ public final class ArmorCruiseController {
 			state.emergencyRecallAttemptId = attemptId == 0L
 					? NEXT_EMERGENCY_RECALL_ATTEMPT_ID.incrementAndGet() : attemptId;
 			state.recallSpeed = Math.max(state.recallSpeed, EMERGENCY_RECALL_INITIAL_SPEED);
-			broadcast(player.getServer(), state.toPayload(player.getUUID()));
+			broadcast(player.level().getServer(), state.toPayload(player.getUUID()));
 		}
 		if (FlightController.tryEngageEmergencyRecallHover(
 				player, state.sequenceId, state.emergencyRecallAttemptId)) {
 			if (newlyPromoted) {
-				player.displayClientMessage(Component.literal("紧急召回：反重力制动已接管，战甲高速返回"), true);
+				player.sendOverlayMessage(Component.literal("紧急召回：反重力制动已接管，战甲高速返回"));
 			}
 		} else if (newlyPromoted) {
 			state.emergencyRecallAttemptId = 0L;
-			broadcast(player.getServer(), state.toPayload(player.getUUID()));
+			broadcast(player.level().getServer(), state.toPayload(player.getUUID()));
 		}
 	}
 
@@ -1290,7 +1290,7 @@ public final class ArmorCruiseController {
 			state.carrier.removeTag(OWNER_DOWN_TAG);
 		}
 		state.phase = ArmorCruisePhase.RECALLING;
-		state.phaseStartGameTime = player.serverLevel().getGameTime();
+		state.phaseStartGameTime = player.level().getGameTime();
 		state.recallSpeed = state.emergencyRecallAttemptId != 0L
 			? EMERGENCY_RECALL_INITIAL_SPEED
 			: afterPhasing
@@ -1300,12 +1300,12 @@ public final class ArmorCruiseController {
 		state.dockingStartPosition = state.carrier.position();
 		state.dockingStartYaw = state.carrier.getYRot();
 		syncLocator(state);
-		broadcast(player.getServer(), state.toPayload(player.getUUID()));
+		broadcast(player.level().getServer(), state.toPayload(player.getUUID()));
 		FlightArmorMod.LOGGER.info("巡航召回切换 owner={} route={} distance={} carrier={}",
 				player.getUUID(), previousPhase + "->RECALLING",
 				String.format(java.util.Locale.ROOT, "%.2f", state.carrier.distanceTo(player)),
 				state.carrier.getUUID());
-		player.displayClientMessage(Component.literal("战甲正在飞回"), true);
+		player.sendOverlayMessage(Component.literal("战甲正在飞回"));
 	}
 
 	/** 真实物品已经原子交给唯一载体；这 28 tick 只冻结巡航和武器，供客户端播放整甲脱离。 */
@@ -1327,7 +1327,7 @@ public final class ArmorCruiseController {
 		state.patrolLevel = (ServerLevel) state.carrier.level();
 		setCruisePose(state.carrier);
 		syncLocator(state);
-		broadcast(player.getServer(), state.toPayload(player.getUUID()));
+		broadcast(player.level().getServer(), state.toPayload(player.getUUID()));
 	}
 
 	private static void tickCruising(ServerPlayer player, CruiseState state, long gameTime) {
@@ -1348,7 +1348,7 @@ public final class ArmorCruiseController {
 	}
 
 	private static void tickOwnerDown(ServerPlayer player, CruiseState state) {
-		long now = player.serverLevel().getGameTime();
+		long now = player.level().getGameTime();
 		tickOwnerDown(state, now);
 		if (player.isAlive() && now >= state.respawnResumeGameTime && allArmorSlotsEmpty(player)) {
 			beginRecallOrPhasing(player, state);
@@ -1376,7 +1376,7 @@ public final class ArmorCruiseController {
 			return;
 		}
 		state.phase = ArmorCruisePhase.OWNER_DOWN;
-		state.phaseStartGameTime = player.serverLevel().getGameTime();
+		state.phaseStartGameTime = player.level().getGameTime();
 		state.ownerDownAnchor = state.carrier.position();
 		state.patrolAnchor = state.ownerDownAnchor;
 		state.recoveringFromDeath = true;
@@ -1386,10 +1386,10 @@ public final class ArmorCruiseController {
 		setCruisePose(state.carrier);
 		updateCarrierTicket(state);
 		syncLocator(state);
-		broadcast(player.getServer(), state.toPayload(player.getUUID()));
+		broadcast(player.level().getServer(), state.toPayload(player.getUUID()));
 		FlightArmorMod.LOGGER.info("巡航进入死亡待机 owner={} reason={} carrier={} dimension={} position={}",
 				player.getUUID(), reason, state.carrier.getUUID(),
-				state.carrier.level().dimension().location(), state.carrier.position());
+				state.carrier.level().dimension().identifier(), state.carrier.position());
 	}
 
 	private static void tickRecalling(ServerPlayer player, CruiseState state) {
@@ -1457,7 +1457,7 @@ public final class ArmorCruiseController {
 			state.carrier.removeTag(OWNER_DOWN_TAG);
 		}
 		state.phase = ArmorCruisePhase.PHASING;
-		state.phaseStartGameTime = player.serverLevel().getGameTime();
+		state.phaseStartGameTime = player.level().getGameTime();
 		state.phasingOrigin = state.carrier.position();
 		state.phasingMigrated = false;
 		state.phasingReentryPosition = Vec3.ZERO;
@@ -1466,11 +1466,11 @@ public final class ArmorCruiseController {
 				: RecallApproachProfile.INITIAL_SPEED;
 		state.recallTicks = 0;
 		syncLocator(state);
-		broadcast(player.getServer(), state.toPayload(player.getUUID()));
+		broadcast(player.level().getServer(), state.toPayload(player.getUUID()));
 		FlightArmorMod.LOGGER.info("巡航召回切换 owner={} route={}->PHASING reason={} carrier={} from={} to={}",
 				player.getUUID(), state.phaseBeforePhasing, reason, state.carrier.getUUID(),
-				state.carrier.level().dimension().location(), player.level().dimension().location());
-		player.displayClientMessage(Component.literal("距离过远，战甲正在折跃接入"), true);
+				state.carrier.level().dimension().identifier(), player.level().dimension().identifier());
+		player.sendOverlayMessage(Component.literal("距离过远，战甲正在折跃接入"));
 	}
 
 	private static void tickPhasing(ServerPlayer player, CruiseState state) {
@@ -1483,7 +1483,7 @@ public final class ArmorCruiseController {
 			return;
 		}
 
-		long now = player.serverLevel().getGameTime();
+		long now = player.level().getGameTime();
 		long elapsed = Math.max(0L, now - state.phaseStartGameTime);
 		if (!state.phasingMigrated) {
 			double p = Mth.clamp((double) elapsed / ArmorCruisePhase.PHASING_MIDPOINT_TICKS, 0.0D, 1.0D);
@@ -1497,7 +1497,7 @@ public final class ArmorCruiseController {
 				state.phasingMigrated = true;
 				// 保证迁移成功后一定展示完整的后半段展开，而不会因区块加载延迟直接跳过。
 				state.phaseStartGameTime = now - ArmorCruisePhase.PHASING_MIDPOINT_TICKS;
-				broadcast(player.getServer(), state.toPayload(player.getUUID()));
+				broadcast(player.level().getServer(), state.toPayload(player.getUUID()));
 			}
 			return;
 		}
@@ -1550,9 +1550,9 @@ public final class ArmorCruiseController {
 			Entity changed = null;
 			RuntimeException migrationFailure = null;
 			try {
-				changed = oldCarrier.changeDimension(new net.minecraft.world.level.portal.DimensionTransition(
+				changed = oldCarrier.teleport(new net.minecraft.world.level.portal.TeleportTransition(
 						site.level, site.position, Vec3.ZERO, player.getYRot(), 0.0F,
-						net.minecraft.world.level.portal.DimensionTransition.DO_NOTHING));
+						net.minecraft.world.level.portal.TeleportTransition.DO_NOTHING));
 			} catch (RuntimeException exception) {
 				migrationFailure = exception;
 			} finally {
@@ -1586,12 +1586,12 @@ public final class ArmorCruiseController {
 		state.phasingReentryPosition = site.position;
 		state.patrolLevel = site.level;
 		syncLocator(state);
-		broadcast(player.getServer(), state.toPayload(player.getUUID()));
+		broadcast(player.level().getServer(), state.toPayload(player.getUUID()));
 
 		if (oldTicketLevel != null && oldTicketChunk != null
 				&& (oldTicketLevel != site.level || !oldTicketChunk.equals(site.chunk))) {
-			oldTicketLevel.getChunkSource().removeRegionTicket(
-					CARRIER_TICKET, oldTicketChunk, CARRIER_TICKET_RADIUS, state.ownerId);
+			oldTicketLevel.getChunkSource().removeTicketWithRadius(
+					CARRIER_TICKET, oldTicketChunk, CARRIER_TICKET_RADIUS);
 		}
 		if (!carrierHasFullSet(newCarrier)) {
 			FlightArmorMod.LOGGER.error("折跃后的载体装备不完整，已保留新载体及索引等待安全恢复 owner={} carrier={}",
@@ -1600,13 +1600,13 @@ public final class ArmorCruiseController {
 		}
 		FlightArmorMod.LOGGER.info(
 				"折跃载体迁移完成 owner={} oldCarrier={} newCarrier={} dimension={} reentryDistance={}",
-				player.getUUID(), oldCarrierId, newCarrier.getUUID(), site.level.dimension().location(),
+				player.getUUID(), oldCarrierId, newCarrier.getUUID(), site.level.dimension().identifier(),
 				String.format(java.util.Locale.ROOT, "%.2f", site.position.distanceTo(player.position())));
 		return true;
 	}
 
 	private static ReentrySite prepareReentrySite(ServerPlayer player, CruiseState state) {
-		ServerLevel level = player.serverLevel();
+		ServerLevel level = player.level();
 		double baseYaw = Math.toRadians(player.getYRot());
 		double[] distances = {PHASING_REENTRY_DISTANCE, 20.0D, 28.0D};
 		double[] offsets = {Math.PI, Math.PI * 0.75D, -Math.PI * 0.75D, Math.PI * 0.5D,
@@ -1617,28 +1617,28 @@ public final class ArmorCruiseController {
 				for (double heightOffset : heightOffsets) {
 			double angle = baseYaw + offset;
 			double y = Mth.clamp(player.getY() + heightOffset,
-					level.getMinBuildHeight() + 2.0D, level.getMaxBuildHeight() - 3.0D);
+					level.getMinY() + 2.0D, level.getMaxY() - 3.0D);
 			Vec3 position = new Vec3(player.getX() - Math.sin(angle) * distance, y,
 					player.getZ() + Math.cos(angle) * distance);
 			if (!level.getWorldBorder().isWithinBounds(position)) {
 				continue;
 			}
-			ChunkPos chunk = new ChunkPos(BlockPos.containing(position));
+			ChunkPos chunk = ChunkPos.containing(BlockPos.containing(position));
 			boolean sharesExisting = level == state.ticketLevel && chunk.equals(state.ticketChunk);
 			if (!sharesExisting) {
-				level.getChunkSource().addRegionTicket(
-						CARRIER_TICKET, chunk, CARRIER_TICKET_RADIUS, state.ownerId);
+				level.getChunkSource().addTicketWithRadius(
+						CARRIER_TICKET, chunk, CARRIER_TICKET_RADIUS);
 			}
 			// 同步取得区块，确保不会在尚未加载的目标区块中销毁源载体。
-			level.getChunk(chunk.x, chunk.z);
+			level.getChunk(chunk.x(), chunk.z());
 			AABB bounds = new AABB(position.x - 0.35D, position.y, position.z - 0.35D,
 					position.x + 0.35D, position.y + 2.05D, position.z + 0.35D);
 			if (level.noCollision(bounds)) {
 				return new ReentrySite(level, position, chunk, !sharesExisting);
 			}
 			if (!sharesExisting) {
-				level.getChunkSource().removeRegionTicket(
-						CARRIER_TICKET, chunk, CARRIER_TICKET_RADIUS, state.ownerId);
+				level.getChunkSource().removeTicketWithRadius(
+						CARRIER_TICKET, chunk, CARRIER_TICKET_RADIUS);
 			}
 				}
 			}
@@ -1648,8 +1648,8 @@ public final class ArmorCruiseController {
 
 	private static void releasePreparedTicket(CruiseState state, ReentrySite site) {
 		if (site.ticketAdded) {
-			site.level.getChunkSource().removeRegionTicket(
-					CARRIER_TICKET, site.chunk, CARRIER_TICKET_RADIUS, state.ownerId);
+			site.level.getChunkSource().removeTicketWithRadius(
+					CARRIER_TICKET, site.chunk, CARRIER_TICKET_RADIUS);
 		}
 	}
 
@@ -1680,15 +1680,15 @@ public final class ArmorCruiseController {
 		if (state.recoveringFromDeath) {
 			state.carrier.addTag(OWNER_DOWN_TAG);
 		}
-		state.phaseStartGameTime = player.serverLevel().getGameTime();
+		state.phaseStartGameTime = player.level().getGameTime();
 		state.dockingStartPosition = state.carrier.position();
 		state.dockingStartYaw = state.carrier.getYRot();
 		state.bootHoverTriggered = false;
 		syncLocator(state);
-		broadcast(player.getServer(), state.toPayload(player.getUUID()));
+		broadcast(player.level().getServer(), state.toPayload(player.getUUID()));
 		FlightArmorMod.LOGGER.info("整甲着装开始 owner={} carrier={} durationTicks={}",
 				player.getUUID(), state.carrier.getUUID(), ArmorCruisePhase.DOCKING_DURATION_TICKS);
-		player.displayClientMessage(Component.literal("整甲已抵达，正在贴合着装"), true);
+		player.sendOverlayMessage(Component.literal("整甲已抵达，正在贴合着装"));
 	}
 
 	private static void tickDocking(ServerPlayer player, CruiseState state) {
@@ -1714,7 +1714,7 @@ public final class ArmorCruiseController {
 			return;
 		}
 
-		long elapsed = Math.max(0L, player.serverLevel().getGameTime() - state.phaseStartGameTime);
+		long elapsed = Math.max(0L, player.level().getGameTime() - state.phaseStartGameTime);
 		if (!state.bootHoverTriggered && elapsed >= ArmorCruisePhase.DOCKING_BOOTS_LOCK_TICKS
 				&& FlightController.tryEngageHoverAfterBootLock(
 						player, AutomaticHoverSource.DOCKING_BOOTS,
@@ -1722,9 +1722,9 @@ public final class ArmorCruiseController {
 			state.bootHoverTriggered = true;
 			if (state.emergencyRecallAttemptId != 0L) {
 				state.emergencyRecallAttemptId = 0L;
-				broadcast(player.getServer(), state.toPayload(player.getUUID()));
+				broadcast(player.level().getServer(), state.toPayload(player.getUUID()));
 			}
-			player.displayClientMessage(Component.literal("战靴锁定完成，反重力悬停已接管"), true);
+			player.sendOverlayMessage(Component.literal("战靴锁定完成，反重力悬停已接管"));
 		}
 		Vec3 bodyTarget = player.position();
 		double yawRadians = Math.toRadians(player.getYRot());
@@ -1807,7 +1807,7 @@ public final class ArmorCruiseController {
 		Map<EquipmentSlot, ItemStack> armor = snapshotCarrierArmor(state.carrier);
 		UUID suitId = carrierSuitId(state.carrier).orElse(null);
 		if (suitId == null || !ChargingPlatformController.markCruisingSuitCarried(
-				player.getServer(), player.getUUID(), suitId)) {
+				player.level().getServer(), player.getUUID(), suitId)) {
 			resumeCruising(player, state, "\u4f4d\u7f6e\u8d26\u672c\u63d0\u4ea4\u5931\u8d25\uff0c\u6218\u7532\u5df2\u4fdd\u6301\u72ec\u7acb\u5de1\u822a");
 			return;
 		}
@@ -1825,7 +1825,7 @@ public final class ArmorCruiseController {
 				player.setItemSlot(slot, ItemStack.EMPTY);
 				state.carrier.setItemSlot(slot, armor.getOrDefault(slot, ItemStack.EMPTY));
 			}
-			ChargingPlatformController.rollbackSuitToCruising(player.getServer(), player.getUUID(), suitId);
+			ChargingPlatformController.rollbackSuitToCruising(player.level().getServer(), player.getUUID(), suitId);
 			player.getInventory().setChanged();
 			player.containerMenu.broadcastChanges();
 			FlightArmorMod.LOGGER.error("整甲贴合提交异常，物品事务已回滚 owner={} carrier={}",
@@ -1840,8 +1840,11 @@ public final class ArmorCruiseController {
 			equipmentUpdate.add(Pair.of(slot, player.getItemBySlot(slot)));
 		}
 		// 显式保证玩家新装备包排在旧载体移除/IDLE 墓碑之前，避免客户端出现空甲一帧。
-		player.serverLevel().getChunkSource().broadcastAndSend(player,
-				new ClientboundSetEquipmentPacket(player.getId(), equipmentUpdate));
+		ClientboundSetEquipmentPacket packet = new ClientboundSetEquipmentPacket(player.getId(), equipmentUpdate);
+		player.connection.send(packet);
+		for (ServerPlayer trackingPlayer : net.fabricmc.fabric.api.networking.v1.PlayerLookup.tracking(player)) {
+			if (trackingPlayer != player) trackingPlayer.connection.send(packet);
+		}
 		releaseCarrierTicket(state);
 		state.carrier.discard();
 		if (!STATES.remove(player.getUUID(), state)) {
@@ -1849,12 +1852,12 @@ public final class ArmorCruiseController {
 			FlightArmorMod.LOGGER.error("玩家 {} 的巡航抵达状态提交失败", player.getUUID());
 		}
 		ArmorCruiseCombatController.cancelByOwnerId(player.getUUID());
-		ArmorCruiseSavedData.removeIfMatches(player.getServer(), player.getUUID(),
+		ArmorCruiseSavedData.removeIfMatches(player.level().getServer(), player.getUUID(),
 				state.carrier.getUUID(), state.sequenceId);
-		broadcast(player.getServer(), idlePayload(player.getUUID(), state));
+		broadcast(player.level().getServer(), idlePayload(player.getUUID(), state));
 		FlightArmorMod.LOGGER.info("整甲着装提交完成 owner={} sequence={} 四件物品已唯一转移到装备槽",
 				player.getUUID(), state.sequenceId);
-		player.displayClientMessage(Component.literal("整甲贴合完成，动力核心已上线"), true);
+		player.sendOverlayMessage(Component.literal("整甲贴合完成，动力核心已上线"));
 		FlightController.tryEngageHoverAfterArmorReady(
 				player, AutomaticHoverSource.DOCKING_COMPLETE,
 				state.sequenceId, state.phaseStartGameTime);
@@ -1863,7 +1866,7 @@ public final class ArmorCruiseController {
 	private static void handleSlotConflict(ServerPlayer player, CruiseState state, String normalMessage) {
 		if (state.recoveringFromDeath) {
 			enterOwnerDown(player, state, "死亡自返途中装甲槽被占用");
-			player.displayClientMessage(Component.literal("装甲槽被占用，战甲继续待机并会在清空后自动召回"), true);
+			player.sendOverlayMessage(Component.literal("装甲槽被占用，战甲继续待机并会在清空后自动召回"));
 		} else {
 			resumeCruising(player, state, normalMessage);
 		}
@@ -1880,7 +1883,7 @@ public final class ArmorCruiseController {
 		return state != null && state.phase == ArmorCruisePhase.DOCKING
 				&& (sequenceId == 0L || state.sequenceId == sequenceId)
 				&& (attemptId == ANY_ATTEMPT_ID || state.phaseStartGameTime == attemptId)
-				&& player.serverLevel().getGameTime() - state.phaseStartGameTime
+				&& player.level().getGameTime() - state.phaseStartGameTime
 				>= ArmorCruisePhase.DOCKING_BOOTS_LOCK_TICKS;
 	}
 
@@ -1895,7 +1898,7 @@ public final class ArmorCruiseController {
 		return state != null && state.phase == ArmorCruisePhase.DOCKING && state.bootHoverTriggered
 				&& (sequenceId == 0L || state.sequenceId == sequenceId)
 				&& (attemptId == ANY_ATTEMPT_ID || state.phaseStartGameTime == attemptId)
-				&& player.serverLevel().getGameTime() - state.phaseStartGameTime
+				&& player.level().getGameTime() - state.phaseStartGameTime
 				>= ArmorCruisePhase.DOCKING_BOOTS_LOCK_TICKS;
 	}
 
@@ -1930,7 +1933,7 @@ public final class ArmorCruiseController {
 			return;
 		}
 		state.emergencyRecallAttemptId = 0L;
-		broadcast(player.getServer(), state.toPayload(player.getUUID()));
+		broadcast(player.level().getServer(), state.toPayload(player.getUUID()));
 	}
 
 	private static void resumeCruising(ServerPlayer player, CruiseState state, String message) {
@@ -1940,7 +1943,7 @@ public final class ArmorCruiseController {
 			return;
 		}
 		state.phase = ArmorCruisePhase.CRUISING;
-		state.phaseStartGameTime = player.serverLevel().getGameTime();
+		state.phaseStartGameTime = player.level().getGameTime();
 		if (state.phasingMigrated || state.patrolLevel != state.carrier.level()) {
 			state.patrolAnchor = state.carrier.position();
 			state.ownerDownAnchor = state.patrolAnchor;
@@ -1954,7 +1957,7 @@ public final class ArmorCruiseController {
 		setCruisePose(state.carrier);
 		updateCarrierTicket(state);
 		syncLocator(state);
-		broadcast(player.getServer(), state.toPayload(player.getUUID()));
+		broadcast(player.level().getServer(), state.toPayload(player.getUUID()));
 		deny(player, message);
 	}
 
@@ -1968,40 +1971,40 @@ public final class ArmorCruiseController {
 		if (!carrierIsUsable(state.carrier)) {
 			STATES.remove(player.getUUID(), state);
 			releaseCarrierTicket(state);
-			broadcast(player.getServer(), idlePayload(player.getUUID(), state));
+			broadcast(player.level().getServer(), idlePayload(player.getUUID(), state));
 			FlightArmorMod.LOGGER.error("玩家 {} 的巡航载体已移除（{}）；为防复制未从旧实体引用提取物品",
 					player.getUUID(), state.carrier == null ? null : state.carrier.getRemovalReason());
 			if (message != null) {
-				player.displayClientMessage(Component.literal("巡航载体已卸载，物品保留在世界存档中等待恢复"), true);
+				player.sendOverlayMessage(Component.literal("巡航载体已卸载，物品保留在世界存档中等待恢复"));
 			}
 			return;
 		}
 		UUID suitId = carrierClaimedSuitId(state.carrier).orElse(null);
 		if (suitId != null && !ChargingPlatformController.markCruisingSuitCarried(
-				player.getServer(), player.getUUID(), suitId)) {
+				player.level().getServer(), player.getUUID(), suitId)) {
 			syncLocator(state);
-			player.displayClientMessage(Component.literal(
-					"\u4f4d\u7f6e\u8d26\u672c\u51b2\u7a81\uff0c\u6218\u7532\u4ecd\u7531\u5de1\u822a\u8f7d\u4f53\u4fdd\u7ba1"), true);
+			player.sendOverlayMessage(Component.literal(
+					"\u4f4d\u7f6e\u8d26\u672c\u51b2\u7a81\uff0c\u6218\u7532\u4ecd\u7531\u5de1\u822a\u8f7d\u4f53\u4fdd\u7ba1"));
 			return;
 		}
 
 		if (!deliverCarrierArmorTransaction(player, state.carrier)) {
 			syncLocator(state);
 			if (suitId != null) ChargingPlatformController.rollbackSuitToCruising(
-					player.getServer(), player.getUUID(), suitId);
+					player.level().getServer(), player.getUUID(), suitId);
 			FlightArmorMod.LOGGER.error("战甲安全归还预提交失败，载体与索引均已保留 owner={} carrier={}",
 					player.getUUID(), state.carrier.getUUID());
-			player.displayClientMessage(Component.literal("物品栏与掉落实体均无法接收战甲，载体已原地保留"), true);
+			player.sendOverlayMessage(Component.literal("物品栏与掉落实体均无法接收战甲，载体已原地保留"));
 			return;
 		}
 		STATES.remove(player.getUUID(), state);
 		releaseCarrierTicket(state);
 		state.carrier.discard();
-		ArmorCruiseSavedData.removeIfMatches(player.getServer(), player.getUUID(),
+		ArmorCruiseSavedData.removeIfMatches(player.level().getServer(), player.getUUID(),
 				state.carrier.getUUID(), state.sequenceId);
-		broadcast(player.getServer(), idlePayload(player.getUUID(), state));
+		broadcast(player.level().getServer(), idlePayload(player.getUUID(), state));
 		if (message != null) {
-			player.displayClientMessage(Component.literal(message), true);
+			player.sendOverlayMessage(Component.literal(message));
 		}
 	}
 
@@ -2013,10 +2016,10 @@ public final class ArmorCruiseController {
 		ArmorCruiseCombatController.cancel(player, "carrier_unloaded");
 		ArmorCruiseCombatController.cancelByOwnerId(player.getUUID());
 		releaseCarrierTicket(state);
-		broadcast(player.getServer(), idlePayload(player.getUUID(), state));
+		broadcast(player.level().getServer(), idlePayload(player.getUUID(), state));
 		FlightArmorMod.LOGGER.error("玩家 {} 的巡航载体异常卸载；未从已保存的旧实体引用提取物品，等待区块恢复",
 				player.getUUID());
-		player.displayClientMessage(Component.literal("巡航载体区块异常卸载，战甲保留在世界存档中"), true);
+		player.sendOverlayMessage(Component.literal("巡航载体区块异常卸载，战甲保留在世界存档中"));
 	}
 
 	/** Removes only independent-cruise ownership tags after another controller accepted the carrier. */
@@ -2030,7 +2033,7 @@ public final class ArmorCruiseController {
 	private static void configureCarrier(ArmorStand carrier, UUID ownerId) {
 		carrier.addTag(CARRIER_TAG);
 		carrier.addTag(OWNER_TAG_PREFIX + ownerId);
-		carrier.setInvulnerable(true);
+		carrier.setPermanentlyInvulnerable(true);
 		carrier.setSilent(true);
 		carrier.setNoGravity(true);
 		carrier.noPhysics = true;
@@ -2132,11 +2135,11 @@ public final class ArmorCruiseController {
 		}
 
 		// 先添加新票据再移除旧票据，保证跨区块召回时不存在一个 tick 的卸载窗口。
-		level.getChunkSource().addRegionTicket(
-				CARRIER_TICKET, nextChunk, CARRIER_TICKET_RADIUS, state.ownerId);
+		level.getChunkSource().addTicketWithRadius(
+				CARRIER_TICKET, nextChunk, CARRIER_TICKET_RADIUS);
 		if (state.ticketLevel != null && state.ticketChunk != null) {
-			state.ticketLevel.getChunkSource().removeRegionTicket(
-					CARRIER_TICKET, state.ticketChunk, CARRIER_TICKET_RADIUS, state.ownerId);
+			state.ticketLevel.getChunkSource().removeTicketWithRadius(
+					CARRIER_TICKET, state.ticketChunk, CARRIER_TICKET_RADIUS);
 		}
 		state.ticketLevel = level;
 		state.ticketChunk = nextChunk;
@@ -2145,8 +2148,8 @@ public final class ArmorCruiseController {
 
 	private static void releaseCarrierTicket(CruiseState state) {
 		if (state.ticketLevel != null && state.ticketChunk != null) {
-			state.ticketLevel.getChunkSource().removeRegionTicket(
-					CARRIER_TICKET, state.ticketChunk, CARRIER_TICKET_RADIUS, state.ownerId);
+			state.ticketLevel.getChunkSource().removeTicketWithRadius(
+					CARRIER_TICKET, state.ticketChunk, CARRIER_TICKET_RADIUS);
 			state.ticketLevel = null;
 			state.ticketChunk = null;
 		}
@@ -2160,7 +2163,7 @@ public final class ArmorCruiseController {
 		Vec3 anchor = state.phase == ArmorCruisePhase.OWNER_DOWN ? state.ownerDownAnchor : state.patrolAnchor;
 		ArmorCruiseSavedData.put(level.getServer(), new ArmorCruiseSavedData.Locator(
 				state.ownerId, state.carrier.getUUID(), carrierSuitId(state.carrier).orElse(null),
-				level.dimension(), chunk.x, chunk.z,
+				level.dimension(), chunk.x(), chunk.z(),
 				state.phase, anchor, state.sequenceId));
 	}
 
@@ -2247,7 +2250,7 @@ public final class ArmorCruiseController {
 	private static void rollbackNewCruiseLedger(ServerPlayer player, UUID ownerId,
 			UUID suitId, String context) {
 		if (!ChargingPlatformController.markCruisingSuitCarried(
-				player.getServer(), ownerId, suitId)) {
+				player.level().getServer(), ownerId, suitId)) {
 			FlightArmorMod.LOGGER.error(
 					"New carrier ledger rollback failed context={} owner={} suit={}",
 					context, ownerId, suitId);
@@ -2262,8 +2265,8 @@ public final class ArmorCruiseController {
 		Map<EquipmentSlot, ItemStack> originals = new EnumMap<>(EquipmentSlot.class);
 		Map<EquipmentSlot, DeliveryTarget> plan = new EnumMap<>(EquipmentSlot.class);
 		List<Integer> freeInventorySlots = new ArrayList<>();
-		for (int index = 0; index < player.getInventory().items.size(); index++) {
-			if (player.getInventory().items.get(index).isEmpty()) {
+		for (int index = 0; index < player.getInventory().getNonEquipmentItems().size(); index++) {
+			if (player.getInventory().getNonEquipmentItems().get(index).isEmpty()) {
 				freeInventorySlots.add(index);
 			}
 		}
@@ -2292,7 +2295,7 @@ public final class ArmorCruiseController {
 			ItemEntity drop = new ItemEntity(player.level(), player.getX(), player.getY() + 0.5D,
 					player.getZ(), stack);
 			drop.setDefaultPickUpDelay();
-			if (!player.serverLevel().addFreshEntity(drop)) {
+			if (!player.level().addFreshEntity(drop)) {
 				drop.discard();
 				for (ItemEntity committedDrop : spawnedDrops.values()) {
 					committedDrop.discard();
@@ -2345,11 +2348,11 @@ public final class ArmorCruiseController {
 		ItemEntity itemEntity = new ItemEntity(player.level(), player.getX(), player.getY() + 0.5D,
 				player.getZ(), stack);
 		itemEntity.setDefaultPickUpDelay();
-		player.serverLevel().addFreshEntity(itemEntity);
+		player.level().addFreshEntity(itemEntity);
 	}
 
 	static Optional<UUID> ownerIdOf(ArmorStand carrier) {
-		for (String tag : carrier.getTags()) {
+		for (String tag : carrier.entityTags()) {
 			if (!tag.startsWith(OWNER_TAG_PREFIX)) {
 				continue;
 			}
@@ -2408,7 +2411,7 @@ public final class ArmorCruiseController {
 		}
 
 		configureCarrier(stand, ownerId.get());
-		boolean ownerDown = stand.getTags().contains(OWNER_DOWN_TAG);
+		boolean ownerDown = stand.entityTags().contains(OWNER_DOWN_TAG);
 		CruiseState recoveredState = new CruiseState(
 				ownerId.get(),
 				NEXT_SEQUENCE_ID.incrementAndGet(),
@@ -2462,10 +2465,10 @@ public final class ArmorCruiseController {
 	private static void broadcastPlatformRecall(ServerPlayer player,
 			ChargingPlatformController.RecallResult result) {
 		ArmorPlatformRecallPayload payload = new ArmorPlatformRecallPayload(
-				player.getUUID(), result.sequenceId(), result.originDimension().location(),
+				player.getUUID(), result.sequenceId(), result.originDimension().identifier(),
 				result.origin(), result.displayMode(), result.startGameTime(), 0);
 		PLATFORM_RECALL_SNAPSHOTS.put(player.getUUID(), new PlatformRecallSnapshot(
-				payload, player.level().dimension().location()));
+				payload, player.level().dimension().identifier()));
 		Set<ServerPlayer> recipients = new java.util.HashSet<>(PlayerLookup.tracking(player));
 		recipients.add(player);
 		for (ServerPlayer recipient : recipients) {
@@ -2489,7 +2492,7 @@ public final class ArmorCruiseController {
 	}
 
 	private static void deny(ServerPlayer player, String message) {
-		player.displayClientMessage(Component.literal(message), true);
+		player.sendOverlayMessage(Component.literal(message));
 	}
 
 	public record WornDeploymentResult(boolean success,
@@ -2510,7 +2513,7 @@ public final class ArmorCruiseController {
 	}
 
 	private record PlatformRecallSnapshot(ArmorPlatformRecallPayload payload,
-			net.minecraft.resources.ResourceLocation targetDimension) {
+			net.minecraft.resources.Identifier targetDimension) {
 	}
 
 	private record ReentrySite(ServerLevel level, Vec3 position, ChunkPos chunk, boolean ticketAdded) {

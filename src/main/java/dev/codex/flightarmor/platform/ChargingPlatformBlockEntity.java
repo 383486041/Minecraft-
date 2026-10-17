@@ -11,6 +11,7 @@ import dev.codex.flightarmor.variant.ArmorVariantData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.chat.Component;
@@ -21,6 +22,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.Container;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -263,16 +266,16 @@ public final class ChargingPlatformBlockEntity extends BlockEntity implements Co
 			}
 		}
 		if (claimedPartCount != 0 && claimedPartCount != ARMOR_SLOTS.size()) {
-			player.displayClientMessage(Component.literal(
-					"平台不能混放认主与无身份部件：请放入同一套四件，或四件全部使用新装甲"), true);
+			player.sendOverlayMessage(Component.literal(
+					"平台不能混放认主与无身份部件：请放入同一套四件，或四件全部使用新装甲"));
 			return;
 		}
 		if (claimedPartCount == ARMOR_SLOTS.size()) {
 			for (int index = 0; index < ARMOR_SLOTS.size(); index++) {
 				if (hasOtherClaimedPart(player, armorItems.get(index), candidateSuit, ARMOR_SLOTS.get(index))) {
-					player.displayClientMessage(Component.literal(
+					player.sendOverlayMessage(Component.literal(
 							"背包或装备栏仍有同一套战甲的重复" + partName(ARMOR_SLOTS.get(index))
-									+ "，平台已拒绝接管"), true);
+									+ "，平台已拒绝接管"));
 					return;
 				}
 			}
@@ -281,7 +284,7 @@ public final class ChargingPlatformBlockEntity extends BlockEntity implements Co
 				serverLevel.getServer(), player.getUUID(), Optional.ofNullable(candidateSuit),
 				serverLevel.dimension(), worldPosition);
 		if (!plan.allowed()) {
-			player.displayClientMessage(Component.literal(plan.message()), true);
+			player.sendOverlayMessage(Component.literal(plan.message()));
 			return;
 		}
 		NonNullList<ItemStack> claimed = NonNullList.withSize(ARMOR_SLOTS.size(), ItemStack.EMPTY);
@@ -291,7 +294,7 @@ public final class ChargingPlatformBlockEntity extends BlockEntity implements Co
 			claimed.set(index, copy);
 		}
 		if (!ArmorOwnershipSavedData.commitCompleteDeposit(serverLevel.getServer(), plan)) {
-			player.displayClientMessage(Component.literal("平台身份刚刚发生变化，请重试"), true);
+			player.sendOverlayMessage(Component.literal("平台身份刚刚发生变化，请重试"));
 			return;
 		}
 		ownerUuid = player.getUUID();
@@ -301,7 +304,7 @@ public final class ChargingPlatformBlockEntity extends BlockEntity implements Co
 		displayMode = ChargingPlatformDisplayMode.ASSEMBLED;
 		syncChanged();
 		ArmorCoreController.bindPlatformIfCoreEquipped(player, this);
-		player.displayClientMessage(Component.literal("完整战甲已认主并接入充能平台"), true);
+		player.sendOverlayMessage(Component.literal("完整战甲已认主并接入充能平台"));
 	}
 
 	private boolean rawSlotsComplete() {
@@ -562,7 +565,7 @@ public final class ChargingPlatformBlockEntity extends BlockEntity implements Co
 		for (EquipmentSlot slot : ARMOR_SLOTS) {
 			addCandidate(candidates, player, ArmorSource.equipment(slot, priority++));
 		}
-		for (int index = 0; index < player.getInventory().items.size(); index++) {
+		for (int index = 0; index < player.getInventory().getNonEquipmentItems().size(); index++) {
 			addCandidate(candidates, player, ArmorSource.inventory(index, priority++));
 		}
 		addCandidate(candidates, player, ArmorSource.offhand(priority));
@@ -595,8 +598,11 @@ public final class ChargingPlatformBlockEntity extends BlockEntity implements Co
 		for (EquipmentSlot slot : ARMOR_SLOTS) {
 			equipment.add(Pair.of(slot, player.getItemBySlot(slot).copy()));
 		}
-		player.serverLevel().getChunkSource().broadcastAndSend(
-				player, new ClientboundSetEquipmentPacket(player.getId(), equipment));
+		ClientboundSetEquipmentPacket packet = new ClientboundSetEquipmentPacket(player.getId(), equipment);
+		player.connection.send(packet);
+		for (ServerPlayer trackingPlayer : net.fabricmc.fabric.api.networking.v1.PlayerLookup.tracking(player)) {
+			if (trackingPlayer != player) trackingPlayer.connection.send(packet);
+		}
 		player.inventoryMenu.broadcastChanges();
 	}
 
@@ -902,26 +908,26 @@ public final class ChargingPlatformBlockEntity extends BlockEntity implements Co
 	}
 
 	@Override
-	protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-		super.loadAdditional(tag, registries);
+	protected void loadAdditional(ValueInput input) {
+		super.loadAdditional(input);
 		for (int index = 0; index < ARMOR_SLOTS.size(); index++) armorItems.set(index, ItemStack.EMPTY);
-		ContainerHelper.loadAllItems(tag, armorItems, registries);
-		platformId = tag.hasUUID("PlatformId") ? tag.getUUID("PlatformId") : UUID.randomUUID();
-		draftOwnerUuid = tag.hasUUID("DraftOwner") ? tag.getUUID("DraftOwner") : null;
-		ownerUuid = tag.hasUUID("Owner") ? tag.getUUID("Owner") : null;
-		suitId = tag.hasUUID("Suit") ? tag.getUUID("Suit") : null;
-		displayMode = ChargingPlatformDisplayMode.fromName(tag.getString("DisplayMode"));
+		ContainerHelper.loadAllItems(input, armorItems);
+		platformId = input.read("PlatformId", UUIDUtil.CODEC).orElseGet(UUID::randomUUID);
+		draftOwnerUuid = input.read("DraftOwner", UUIDUtil.CODEC).orElse(null);
+		ownerUuid = input.read("Owner", UUIDUtil.CODEC).orElse(null);
+		suitId = input.read("Suit", UUIDUtil.CODEC).orElse(null);
+		displayMode = ChargingPlatformDisplayMode.fromName(input.getStringOr("DisplayMode", ""));
 	}
 
 	@Override
-	protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-		super.saveAdditional(tag, registries);
-		ContainerHelper.saveAllItems(tag, armorItems, true, registries);
-		tag.putUUID("PlatformId", platformId);
-		if (draftOwnerUuid != null) tag.putUUID("DraftOwner", draftOwnerUuid);
-		if (ownerUuid != null) tag.putUUID("Owner", ownerUuid);
-		if (suitId != null) tag.putUUID("Suit", suitId);
-		tag.putString("DisplayMode", displayMode.name());
+	protected void saveAdditional(ValueOutput output) {
+		super.saveAdditional(output);
+		ContainerHelper.saveAllItems(output, armorItems, true);
+		output.store("PlatformId", UUIDUtil.CODEC, platformId);
+		if (draftOwnerUuid != null) output.store("DraftOwner", UUIDUtil.CODEC, draftOwnerUuid);
+		if (ownerUuid != null) output.store("Owner", UUIDUtil.CODEC, ownerUuid);
+		if (suitId != null) output.store("Suit", UUIDUtil.CODEC, suitId);
+		output.putString("DisplayMode", displayMode.name());
 	}
 
 	@Override

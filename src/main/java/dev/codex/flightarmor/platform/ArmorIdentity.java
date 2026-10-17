@@ -1,6 +1,7 @@
 package dev.codex.flightarmor.platform;
 
 import dev.codex.flightarmor.item.ModItems;
+import dev.codex.flightarmor.util.TagUtils;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -48,18 +49,18 @@ public final class ArmorIdentity {
 	}
 
 	private static Identity parseRawIdentity(CompoundTag root) {
-		if (!root.contains(ROOT_KEY, CompoundTag.TAG_COMPOUND)) return null;
-		CompoundTag identity = root.getCompound(ROOT_KEY);
-		if (identity.getInt(VERSION_KEY) != FORMAT_VERSION) return null;
-		if (!identity.hasUUID(OWNER_KEY) || !identity.hasUUID(SUIT_KEY)) return null;
+		if (!root.contains(ROOT_KEY)) return null;
+		CompoundTag identity = root.getCompoundOrEmpty(ROOT_KEY);
+		if (identity.getIntOr(VERSION_KEY, 0) != FORMAT_VERSION) return null;
+		if (!TagUtils.hasUUID(identity, OWNER_KEY) || !TagUtils.hasUUID(identity, SUIT_KEY)) return null;
 		EquipmentSlot slot;
 		try {
-			slot = EquipmentSlot.valueOf(identity.getString(SLOT_KEY));
+			slot = EquipmentSlot.valueOf(identity.getStringOr(SLOT_KEY, ""));
 		} catch (IllegalArgumentException ignored) {
 			return null;
 		}
 		if (!isArmorSlot(slot)) return null;
-		return new Identity(identity.getUUID(OWNER_KEY), identity.getUUID(SUIT_KEY), slot);
+		return new Identity(TagUtils.getUUID(identity, OWNER_KEY), TagUtils.getUUID(identity, SUIT_KEY), slot);
 	}
 
 	/** 给尚未认主的部件写入身份；已有身份必须与请求完全一致。 */
@@ -76,8 +77,8 @@ public final class ArmorIdentity {
 
 		CompoundTag identity = new CompoundTag();
 		identity.putInt(VERSION_KEY, FORMAT_VERSION);
-		identity.putUUID(OWNER_KEY, ownerId);
-		identity.putUUID(SUIT_KEY, suitId);
+		TagUtils.putUUID(identity, OWNER_KEY, ownerId);
+		TagUtils.putUUID(identity, SUIT_KEY, suitId);
 		identity.putString(SLOT_KEY, slot.name());
 		root.put(ROOT_KEY, identity);
 		CustomData updated = CustomData.of(root);

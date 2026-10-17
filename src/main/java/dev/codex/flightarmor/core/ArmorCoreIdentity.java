@@ -1,5 +1,6 @@
 package dev.codex.flightarmor.core;
 
+import dev.codex.flightarmor.util.TagUtils;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
@@ -21,10 +22,10 @@ public final class ArmorCoreIdentity {
 		if (data == null) return Optional.empty();
 		CompoundTag root = data.copyTag();
 		if (!root.contains(ROOT)) return Optional.empty();
-		CompoundTag tag = root.getCompound(ROOT);
-		if (tag.getInt("Version") != FORMAT_VERSION || !tag.hasUUID("Core")
-				|| !tag.hasUUID("Owner") || !tag.hasUUID("Nonce")) return Optional.empty();
-		return Optional.of(new Identity(tag.getUUID("Core"), tag.getUUID("Owner"), tag.getUUID("Nonce")));
+		CompoundTag tag = root.getCompoundOrEmpty(ROOT);
+		if (tag.getIntOr("Version", 0) != FORMAT_VERSION || !TagUtils.hasUUID(tag, "Core")
+				|| !TagUtils.hasUUID(tag, "Owner") || !TagUtils.hasUUID(tag, "Nonce")) return Optional.empty();
+		return Optional.of(new Identity(TagUtils.getUUID(tag, "Core"), TagUtils.getUUID(tag, "Owner"), TagUtils.getUUID(tag, "Nonce")));
 	}
 
 	public static Optional<Identity> claim(ItemStack stack, UUID ownerId) {
@@ -37,9 +38,9 @@ public final class ArmorCoreIdentity {
 		CompoundTag root = oldData == null ? new CompoundTag() : oldData.copyTag();
 		CompoundTag tag = new CompoundTag();
 		tag.putInt("Version", FORMAT_VERSION);
-		tag.putUUID("Core", created.coreId());
-		tag.putUUID("Owner", created.ownerId());
-		tag.putUUID("Nonce", created.instanceNonce());
+		TagUtils.putUUID(tag, "Core", created.coreId());
+		TagUtils.putUUID(tag, "Owner", created.ownerId());
+		TagUtils.putUUID(tag, "Nonce", created.instanceNonce());
 		root.put(ROOT, tag);
 		stack.set(DataComponents.CUSTOM_DATA, CustomData.of(root));
 		return Optional.of(created);

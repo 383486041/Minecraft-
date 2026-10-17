@@ -42,25 +42,25 @@ public final class ArmorConfigurationData {
 			return cached.snapshot;
 		}
 		CompoundTag customRoot = data.copyTag();
-		if (!customRoot.contains(ROOT_KEY, CompoundTag.TAG_COMPOUND)) {
+		if (!customRoot.contains(ROOT_KEY)) {
 			lastRead = new CachedSnapshot(data, Snapshot.DEFAULT);
 			return Snapshot.DEFAULT;
 		}
-		CompoundTag root = customRoot.getCompound(ROOT_KEY);
-		int version = root.getInt(VERSION_KEY);
+		CompoundTag root = customRoot.getCompoundOrEmpty(ROOT_KEY);
+		int version = root.getIntOr(VERSION_KEY, 0);
 		if (version < 1 || version > FORMAT_VERSION) {
 			lastRead = new CachedSnapshot(data, Snapshot.DEFAULT);
 			return Snapshot.DEFAULT;
 		}
 		Snapshot parsed = new Snapshot(
-				SentinelArmorMode.fromSerializedName(root.getString(MODE_KEY)),
-				Math.max(0L, root.getLong(REVISION_KEY)),
-				Math.max(0L, root.getLong(TRANSITION_START_KEY)),
-				version >= 2 && root.getBoolean(WINGMEN_DEPLOYED_KEY),
-				version >= 2 ? Math.max(0L, root.getLong(WINGMEN_REVISION_KEY)) : 0L,
+				SentinelArmorMode.fromSerializedName(root.getStringOr(MODE_KEY, "")),
+				Math.max(0L, root.getLongOr(REVISION_KEY, 0L)),
+				Math.max(0L, root.getLongOr(TRANSITION_START_KEY, 0L)),
+				version >= 2 && root.getBooleanOr(WINGMEN_DEPLOYED_KEY, false),
+				version >= 2 ? Math.max(0L, root.getLongOr(WINGMEN_REVISION_KEY, 0L)) : 0L,
 				version >= 2
-						? Math.max(0L, root.getLong(WINGMEN_TRANSITION_START_KEY)) : 0L,
-				version >= 2 ? clampUnit(root.getFloat(WINGMEN_START_OWNERSHIP_KEY)) : 0.0F);
+						? Math.max(0L, root.getLongOr(WINGMEN_TRANSITION_START_KEY, 0L)) : 0L,
+				version >= 2 ? clampUnit(root.getFloatOr(WINGMEN_START_OWNERSHIP_KEY, 0.0F)) : 0.0F);
 		lastRead = new CachedSnapshot(data, parsed);
 		return parsed;
 	}

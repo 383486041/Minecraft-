@@ -60,7 +60,7 @@ public final class SentinelWingmanController {
 			deny(owner, "message.flight_armor.wingmen_busy");
 			return;
 		}
-		long now = owner.serverLevel().getGameTime();
+		long now = owner.level().getGameTime();
 		long lastCommand = LAST_COMMAND_TICK.getOrDefault(ownerId, Long.MIN_VALUE / 2L);
 		if (now - lastCommand < MINIMUM_COMMAND_GAP_TICKS) return;
 		ArmorConfigurationAccess.ConfiguredSentinel configured =
@@ -98,9 +98,9 @@ public final class SentinelWingmanController {
 				deploy ? ModSoundEvents.ASSEMBLY_UNLOCK_TORSO
 						: ModSoundEvents.ASSEMBLY_RETRACT_HEAVY,
 				SoundSource.PLAYERS, deploy ? 0.72F : 0.64F, deploy ? 1.08F : 0.94F);
-		owner.displayClientMessage(Component.translatable(deploy
+		owner.sendOverlayMessage(Component.translatable(deploy
 				? "message.flight_armor.wingmen_deploying"
-				: "message.flight_armor.wingmen_recalling"), true);
+				: "message.flight_armor.wingmen_recalling"));
 	}
 
 	public static void tickServer(MinecraftServer server) {
@@ -227,7 +227,7 @@ public final class SentinelWingmanController {
 	}
 
 	static void track(SentinelWingmanEntity wingman) {
-		if (wingman != null && !wingman.level().isClientSide) LIVE.add(wingman);
+		if (wingman != null && !wingman.level().isClientSide()) LIVE.add(wingman);
 	}
 
 	static void untrack(SentinelWingmanEntity wingman) {
@@ -265,7 +265,7 @@ public final class SentinelWingmanController {
 	}
 
 	private static void deny(ServerPlayer owner, String translationKey) {
-		owner.displayClientMessage(Component.translatable(translationKey), true);
+		owner.sendOverlayMessage(Component.translatable(translationKey));
 	}
 
 	record WingmanKey(UUID ownerId, UUID suitId, int side) {

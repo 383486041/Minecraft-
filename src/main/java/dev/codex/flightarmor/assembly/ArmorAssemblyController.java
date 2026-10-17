@@ -118,9 +118,9 @@ public final class ArmorAssemblyController {
 		boolean locksFlight = !hadFlightGear
 				&& ArmorAssemblySlotMask.contains(result.affectedSlotMask(), EquipmentSlot.FEET);
 		beginAnimation(player, result.affectedSlotMask(), false, true, locksFlight, Map.of());
-		player.displayClientMessage(Component.literal(
+		player.sendOverlayMessage(Component.literal(
 				result.affectedSlotMask() == ArmorAssemblySlotMask.FULL_SET
-						? "战甲分件召回已启动" : "正在补装缺失的战甲部件"), true);
+						? "战甲分件召回已启动" : "正在补装缺失的战甲部件"));
 	}
 
 	/** 巡航载体完成物品交接后，保留原有的整甲收束动画。 */
@@ -158,7 +158,7 @@ public final class ArmorAssemblyController {
 		}
 		boolean locksFlight = !hadFlightGear && slot == EquipmentSlot.FEET;
 		beginAnimation(player, result.affectedSlotMask(), false, false, locksFlight, Map.of());
-		player.displayClientMessage(Component.literal("正在穿戴" + partName(slot)), true);
+		player.sendOverlayMessage(Component.literal("正在穿戴" + partName(slot)));
 		return true;
 	}
 
@@ -201,14 +201,14 @@ public final class ArmorAssemblyController {
 		beginAnimation(player, mask, true, false, false, Map.copyOf(pending));
 		if (switchingSuit) {
 			SWITCH_HANDOFF_RETRACTIONS.add(player.getUUID());
-			player.displayClientMessage(Component.translatable(
-					"message.flight_armor.quick_switch.separating"), true);
+			player.sendOverlayMessage(Component.translatable(
+					"message.flight_armor.quick_switch.separating"));
 			return true;
 		}
 		SWITCH_HANDOFF_RETRACTIONS.remove(player.getUUID());
-        player.displayClientMessage(Component.literal(pending.size() == 1
+        player.sendOverlayMessage(Component.literal(pending.size() == 1
 				? "正在解除" + partName(pending.keySet().iterator().next())
-				: "正在分件收起战甲"), true);
+				: "正在分件收起战甲"));
 		return true;
 	}
 
@@ -216,7 +216,7 @@ public final class ArmorAssemblyController {
 			boolean fullAssembly, boolean locksFlight, Map<EquipmentSlot, ItemStack> pendingRetraction) {
 		BOOT_HOVER_LOCK_OVERRIDES.remove(player.getUUID());
 		long sequenceId = NEXT_SEQUENCE_ID.incrementAndGet();
-		long startGameTime = player.serverLevel().getGameTime();
+		long startGameTime = player.level().getGameTime();
 		int timelineStart = ArmorAssemblySlotMask.timelineStart(affectedSlotMask);
 		int timelineEnd = ArmorAssemblySlotMask.timelineEnd(
 				affectedSlotMask, locksFlight && !retracting);
@@ -252,7 +252,7 @@ public final class ArmorAssemblyController {
 			}
 
 			AssemblyState state = entry.getValue();
-			long elapsed = Math.max(0L, player.serverLevel().getGameTime() - state.startGameTime());
+			long elapsed = Math.max(0L, player.level().getGameTime() - state.startGameTime());
 			// 脱甲完成后保留 2 tick 的“已飞离”视觉墓碑，覆盖装备同步包可能稍晚到达的一帧。
 			if (state.retracting() && !state.animating()) {
 				if (elapsed >= state.durationTicks() + 2L && STATES.remove(entry.getKey(), state)) {
@@ -270,7 +270,7 @@ public final class ArmorAssemblyController {
 					&& ArmorAssemblySlotMask.contains(state.affectedSlotMask(), EquipmentSlot.FEET)) {
 				// 输入不在此阶段生效；这里只避免低空召回在本次战靴锁定时间点前先结算摔落伤害。
 				FlightPhysics.applyPreBootFallArrest(player);
-				player.hurtMarked = true;
+				player.syncVelocity = true;
 			}
 			if (state.locksFlight() && !state.retracting() && !state.bootHoverTriggered()
 					&& ArmorAssemblySlotMask.contains(state.affectedSlotMask(), EquipmentSlot.FEET)
@@ -281,7 +281,7 @@ public final class ArmorAssemblyController {
 				AssemblyState bootsOnline = state.withBootHoverTriggered(true);
 				if (STATES.replace(entry.getKey(), state, bootsOnline)) {
 					state = bootsOnline;
-					player.displayClientMessage(Component.literal("战靴锁定完成，反重力悬停已接管"), true);
+					player.sendOverlayMessage(Component.literal("战靴锁定完成，反重力悬停已接管"));
 				}
 			}
 
@@ -301,12 +301,12 @@ public final class ArmorAssemblyController {
 				if (STATES.replace(entry.getKey(), state, completedRetraction)) {
 					broadcast(player, completedRetraction.toPayload(player.getUUID(), true));
 					boolean switchHandoff = SWITCH_HANDOFF_RETRACTIONS.remove(entry.getKey());
-					if (switchHandoff) player.displayClientMessage(Component.translatable(
-							"message.flight_armor.quick_switch.separated"), true);
+					if (switchHandoff) player.sendOverlayMessage(Component.translatable(
+							"message.flight_armor.quick_switch.separated"));
 					if (!ModItems.hasFlightGear(player)) FlightController.remove(player);
-					if (!switchHandoff) player.displayClientMessage(Component.literal(result.movedCount() == 1
+					if (!switchHandoff) player.sendOverlayMessage(Component.literal(result.movedCount() == 1
 							? "已解除" + partName(result.singleSlot())
-							: "已将 " + result.movedCount() + " 件战甲部件收进背包"), true);
+							: "已将 " + result.movedCount() + " 件战甲部件收进背包"));
 				}
 				continue;
 			}
@@ -316,15 +316,15 @@ public final class ArmorAssemblyController {
 				BOOT_HOVER_LOCK_OVERRIDES.remove(entry.getKey());
 				broadcast(player, completed.toPayload(player.getUUID(), true));
 				if (state.fullAssembly()) {
-					player.displayClientMessage(Component.literal(
+					player.sendOverlayMessage(Component.literal(
 							state.affectedSlotMask() == ArmorAssemblySlotMask.FULL_SET
-									? "战甲组装完成，核心已上线" : "缺失战甲部件补装完成"), true);
+									? "战甲组装完成，核心已上线" : "缺失战甲部件补装完成"));
 					FlightController.tryEngageHoverAfterArmorReady(
 							player, AutomaticHoverSource.ASSEMBLY_COMPLETE,
 							state.sequenceId(), state.startGameTime());
 				} else {
-					player.displayClientMessage(Component.literal(
-							"已穿戴" + partName(singleSlot(state.affectedSlotMask()))), true);
+					player.sendOverlayMessage(Component.literal(
+							"已穿戴" + partName(singleSlot(state.affectedSlotMask()))));
 				}
 			}
 		}
@@ -378,7 +378,7 @@ public final class ArmorAssemblyController {
 				&& (sequenceId == 0L || state.sequenceId() == sequenceId)
 				&& (attemptId == ANY_ATTEMPT_ID || state.startGameTime() == attemptId)
 				&& state.dimension().equals(player.level().dimension())
-				&& canonicalTick(state, player.serverLevel().getGameTime() - state.startGameTime())
+				&& canonicalTick(state, player.level().getGameTime() - state.startGameTime())
 				>= bootHoverLockTick(player.getUUID());
 	}
 
@@ -393,7 +393,7 @@ public final class ArmorAssemblyController {
 				&& (sequenceId == 0L || state.sequenceId() == sequenceId)
 				&& (attemptId == ANY_ATTEMPT_ID || state.startGameTime() == attemptId)
 				&& state.dimension().equals(player.level().dimension())
-				&& canonicalTick(state, player.serverLevel().getGameTime() - state.startGameTime())
+				&& canonicalTick(state, player.level().getGameTime() - state.startGameTime())
 				>= ArmorAssemblyTiming.BOOTS_LOCK_TICKS;
 	}
 
@@ -602,8 +602,8 @@ public final class ArmorAssemblyController {
 			Predicate<AssemblySetKey> admission) {
 		if (requiredSlots.isEmpty()) return null;
 		EquipmentSlot anchorSlot = requiredSlots.getFirst();
-		for (int index = 0; index < inventory.items.size(); index++) {
-			ItemStack candidate = inventory.items.get(index);
+		for (int index = 0; index < inventory.getNonEquipmentItems().size(); index++) {
+			ItemStack candidate = inventory.getNonEquipmentItems().get(index);
 			AssemblySetKey candidateSet = assemblySetKey(player, candidate, anchorSlot);
 			if (candidateSet == null || !admission.test(candidateSet)) continue;
 			boolean complete = true;
@@ -620,9 +620,9 @@ public final class ArmorAssemblyController {
 
 	private static int findInventorySlot(ServerPlayer player, Inventory inventory,
 			EquipmentSlot equipmentSlot, AssemblySetKey expectedSet, Set<Integer> reservedSlots) {
-		for (int index = 0; index < inventory.items.size(); index++) {
+		for (int index = 0; index < inventory.getNonEquipmentItems().size(); index++) {
 			if (!reservedSlots.contains(index)
-					&& matchesAssemblySet(player, inventory.items.get(index), equipmentSlot, expectedSet)) {
+					&& matchesAssemblySet(player, inventory.getNonEquipmentItems().get(index), equipmentSlot, expectedSet)) {
 				return index;
 			}
 		}
@@ -650,8 +650,8 @@ public final class ArmorAssemblyController {
 
 	private static List<Integer> findEmptyInventorySlots(Inventory inventory, int count) {
 		List<Integer> result = new ArrayList<>(count);
-		for (int index = 0; index < inventory.items.size() && result.size() < count; index++) {
-			if (inventory.items.get(index).isEmpty()) result.add(index);
+		for (int index = 0; index < inventory.getNonEquipmentItems().size() && result.size() < count; index++) {
+			if (inventory.getNonEquipmentItems().get(index).isEmpty()) result.add(index);
 		}
 		return result;
 	}
@@ -697,7 +697,7 @@ public final class ArmorAssemblyController {
 	}
 
 	private static void deny(ServerPlayer player, String message) {
-		player.displayClientMessage(Component.literal(message), true);
+		player.sendOverlayMessage(Component.literal(message));
 	}
 
 	private static void broadcast(ServerPlayer player, ArmorAssemblyStatePayload payload) {

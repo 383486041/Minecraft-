@@ -3,10 +3,12 @@ package dev.codex.flightarmor.combat;
 import dev.codex.flightarmor.cruise.ArmorCruiseCombatController;
 import dev.codex.flightarmor.cruise.ArmorEscortController;
 import dev.codex.flightarmor.network.ArmorAttackFxPayload;
-import net.minecraft.nbt.CompoundTag;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -90,7 +92,7 @@ public final class ArmorHomingMissileEntity extends Projectile {
 	@Override
 	public void tick() {
 		super.tick();
-		if (level().isClientSide) {
+		if (level().isClientSide()) {
 			Vec3 movement = getDeltaMovement();
 			if (movement.lengthSqr() > 1.0E-8D) {
 				setPos(position().add(movement));
@@ -186,10 +188,10 @@ public final class ArmorHomingMissileEntity extends Projectile {
 
 	private void hitEntity(ServerPlayer owner, Entity entity, Vec3 impact, Vec3 incoming) {
 		if (CombatTargetPolicy.canDamage(owner, entity)) {
-			boolean hurt = entity.hurt(ModDamageTypes.armorMissile(owner, this), damage);
+			boolean hurt = entity.hurtOrSimulate(ModDamageTypes.armorMissile(owner, this), damage);
 			if (hurt && entity instanceof LivingEntity living) {
 				living.knockback(ArmorCombatTuning.CRUISE_MISSILE_KNOCKBACK,
-						position().x - living.getX(), position().z - living.getZ());
+						position().x - living.getX(), position().z - living.getZ(), null, 0.0F);
 			}
 		}
 		Vec3 normal = incoming.lengthSqr() < 1.0E-8D
@@ -200,10 +202,15 @@ public final class ArmorHomingMissileEntity extends Projectile {
 	}
 
 	@Override
-	public boolean hurt(DamageSource source, float amount) {
+	public boolean hurtServer(ServerLevel level, DamageSource source, float amount) {
 		if (isRemoved() || amount <= 0.0F) return false;
-		if (!level().isClientSide) discardWithoutDamage();
-		else markHurt();
+		discardWithoutDamage();
+		return true;
+	}
+
+	@Override
+	public boolean hurtClient(DamageSource source) {
+		markHurt();
 		return true;
 	}
 
@@ -228,43 +235,43 @@ public final class ArmorHomingMissileEntity extends Projectile {
 	}
 
 	@Override
-	protected void addAdditionalSaveData(CompoundTag tag) {
-		super.addAdditionalSaveData(tag);
-		putUuid(tag, "FlightArmorOwner", ownerId);
-		putUuid(tag, "FlightArmorSuit", suitId);
-		putUuid(tag, "FlightArmorCarrier", carrierId);
-		putUuid(tag, "FlightArmorTarget", targetId);
-		tag.putLong("FlightArmorActionSequence", actionSequence);
-		tag.putLong("FlightArmorCarrierRevision", carrierRevision);
-		tag.putLong("FlightArmorAttackId", attackId);
-		tag.putInt("FlightArmorMissileIndex", missileIndex);
-		tag.putFloat("FlightArmorDamage", damage);
-		tag.putInt("FlightArmorMaximumLife", maximumLifeTicks);
-		tag.putDouble("FlightArmorMaximumTravel", maximumTravel);
-		tag.putDouble("FlightArmorDistanceTravelled", distanceTravelled);
-		tag.putDouble("FlightArmorLaunchX", launchOrigin.x);
-		tag.putDouble("FlightArmorLaunchY", launchOrigin.y);
-		tag.putDouble("FlightArmorLaunchZ", launchOrigin.z);
+	protected void addAdditionalSaveData(ValueOutput output) {
+		super.addAdditionalSaveData(output);
+		if (ownerId != null) output.store("FlightArmorOwner", UUIDUtil.CODEC, ownerId);
+		if (suitId != null) output.store("FlightArmorSuit", UUIDUtil.CODEC, suitId);
+		if (carrierId != null) output.store("FlightArmorCarrier", UUIDUtil.CODEC, carrierId);
+		if (targetId != null) output.store("FlightArmorTarget", UUIDUtil.CODEC, targetId);
+		output.putLong("FlightArmorActionSequence", actionSequence);
+		output.putLong("FlightArmorCarrierRevision", carrierRevision);
+		output.putLong("FlightArmorAttackId", attackId);
+		output.putInt("FlightArmorMissileIndex", missileIndex);
+		output.putFloat("FlightArmorDamage", damage);
+		output.putInt("FlightArmorMaximumLife", maximumLifeTicks);
+		output.putDouble("FlightArmorMaximumTravel", maximumTravel);
+		output.putDouble("FlightArmorDistanceTravelled", distanceTravelled);
+		output.putDouble("FlightArmorLaunchX", launchOrigin.x);
+		output.putDouble("FlightArmorLaunchY", launchOrigin.y);
+		output.putDouble("FlightArmorLaunchZ", launchOrigin.z);
 	}
 
 	@Override
-	protected void readAdditionalSaveData(CompoundTag tag) {
-		super.readAdditionalSaveData(tag);
-		ownerId = readUuid(tag, "FlightArmorOwner");
-		suitId = readUuid(tag, "FlightArmorSuit");
-		carrierId = readUuid(tag, "FlightArmorCarrier");
-		targetId = readUuid(tag, "FlightArmorTarget");
-		actionSequence = tag.getLong("FlightArmorActionSequence");
-		carrierRevision = tag.getLong("FlightArmorCarrierRevision");
-		attackId = tag.getLong("FlightArmorAttackId");
-		missileIndex = tag.getInt("FlightArmorMissileIndex");
-		damage = tag.getFloat("FlightArmorDamage");
-		if (tag.contains("FlightArmorMaximumLife")) maximumLifeTicks = tag.getInt("FlightArmorMaximumLife");
-		if (tag.contains("FlightArmorMaximumTravel")) maximumTravel = tag.getDouble("FlightArmorMaximumTravel");
-		distanceTravelled = tag.getDouble("FlightArmorDistanceTravelled");
-		launchOrigin = new Vec3(tag.getDouble("FlightArmorLaunchX"), tag.getDouble("FlightArmorLaunchY"),
-				tag.getDouble("FlightArmorLaunchZ"));
-		if (!level().isClientSide) LIVE.add(this);
+	protected void readAdditionalSaveData(ValueInput input) {
+		super.readAdditionalSaveData(input);
+		ownerId = input.read("FlightArmorOwner", UUIDUtil.CODEC).orElse(null);
+		suitId = input.read("FlightArmorSuit", UUIDUtil.CODEC).orElse(null);
+		carrierId = input.read("FlightArmorCarrier", UUIDUtil.CODEC).orElse(null);
+		targetId = input.read("FlightArmorTarget", UUIDUtil.CODEC).orElse(null);
+		actionSequence = input.getLongOr("FlightArmorActionSequence", 0L);
+		carrierRevision = input.getLongOr("FlightArmorCarrierRevision", 0L);
+		attackId = input.getLongOr("FlightArmorAttackId", 0L);
+		missileIndex = input.getIntOr("FlightArmorMissileIndex", 0);
+		damage = input.getFloatOr("FlightArmorDamage", 0.0F);
+		maximumLifeTicks = input.getIntOr("FlightArmorMaximumLife", DEFAULT_MAXIMUM_LIFE_TICKS);
+		maximumTravel = input.getDoubleOr("FlightArmorMaximumTravel", ArmorCombatTuning.CRUISE_MISSILE_RANGE + 18.0D);
+		distanceTravelled = input.getDoubleOr("FlightArmorDistanceTravelled", 0.0D);
+		launchOrigin = new Vec3(input.getDoubleOr("FlightArmorLaunchX", 0.0D), input.getDoubleOr("FlightArmorLaunchY", 0.0D),
+				input.getDoubleOr("FlightArmorLaunchZ", 0.0D));
+		if (!level().isClientSide()) LIVE.add(this);
 	}
 
 	@Override
@@ -331,14 +338,6 @@ public final class ArmorHomingMissileEntity extends Projectile {
 
 	private static Vec3 fromPure(HomingMissileKinematics.Vector vector) {
 		return new Vec3(vector.x(), vector.y(), vector.z());
-	}
-
-	private static void putUuid(CompoundTag tag, String key, UUID value) {
-		if (value != null) tag.putUUID(key, value);
-	}
-
-	private static UUID readUuid(CompoundTag tag, String key) {
-		return tag.contains(key) ? tag.getUUID(key) : null;
 	}
 
 	private record EntityCollision(Entity entity, double fraction) {

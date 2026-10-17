@@ -65,7 +65,7 @@ public final class AutomaticEquipHoverController {
 			case START_EDGE -> {
 				long edgeId = nextEdgeId();
 				tracker.previouslyEligible = true;
-				tracker.pending = new PendingEdge(edgeId, player.serverLevel().getGameTime(),
+				tracker.pending = new PendingEdge(edgeId, player.level().getGameTime(),
 						player.tickCount + EDGE_RETRY_TICKS, false);
 				attemptEdge(player, tracker);
 			}

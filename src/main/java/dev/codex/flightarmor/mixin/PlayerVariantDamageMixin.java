@@ -2,6 +2,7 @@ package dev.codex.flightarmor.mixin;
 
 import dev.codex.flightarmor.item.ModItems;
 import dev.codex.flightarmor.variant.ArmorVariant;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -9,14 +10,15 @@ import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityReference;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.animal.IronGolem;
+import net.minecraft.world.entity.animal.golem.IronGolem;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.monster.Ravager;
 import net.minecraft.world.entity.monster.warden.Warden;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.projectile.AbstractArrow;
+import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.projectile.ProjectileDeflection;
 import org.spongepowered.asm.mixin.Mixin;
@@ -32,8 +34,8 @@ import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
  */
 @Mixin(Player.class)
 public abstract class PlayerVariantDamageMixin {
-	@Inject(method = "hurt", at = @At("HEAD"), cancellable = true)
-	private void flightArmor$interceptOrdinaryHits(DamageSource source, float amount,
+	@Inject(method = "hurtServer", at = @At("HEAD"), cancellable = true)
+	private void flightArmor$interceptOrdinaryHits(ServerLevel level, DamageSource source, float amount,
 			CallbackInfoReturnable<Boolean> callback) {
 		Player self = (Player) (Object) this;
 		if (!(self instanceof ServerPlayer player) || player.getAbilities().invulnerable
@@ -47,7 +49,7 @@ public abstract class PlayerVariantDamageMixin {
 			// AbstractArrow performs vanilla REVERSE deflection after hurt() returns
 			// false. Running it here as well would reverse the arrow twice.
 			if (!(projectile instanceof AbstractArrow)) {
-				projectile.deflect(ProjectileDeflection.REVERSE, player, player, true);
+				projectile.deflect(ProjectileDeflection.REVERSE, player, EntityReference.of(player), true, 1.0D);
 			}
 			player.level().broadcastEntityEvent(player, (byte) 29);
 			player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -64,14 +66,14 @@ public abstract class PlayerVariantDamageMixin {
 		}
 	}
 
-	@ModifyArgs(method = "hurt", at = @At(value = "INVOKE",
-			target = "Lnet/minecraft/world/entity/LivingEntity;hurt(Lnet/minecraft/world/damagesource/DamageSource;F)Z"))
+	@ModifyArgs(method = "hurtServer", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/world/entity/Avatar;hurtServer(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/damagesource/DamageSource;F)Z"))
 	private void flightArmor$applyVariantDamageProfile(Args args) {
 		Player self = (Player) (Object) this;
 		if (!(self instanceof ServerPlayer player) || player.getAbilities().invulnerable) return;
 
-		DamageSource source = args.get(0);
-		float amount = args.get(1);
+		DamageSource source = args.get(1);
+		float amount = args.get(2);
 		if (source == null || !Float.isFinite(amount) || amount <= 0.0F
 				|| source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
 			return;
@@ -81,7 +83,7 @@ public abstract class PlayerVariantDamageMixin {
 
 		// 穿齐同型号整套后坠落完全免疫：落地缓冲由装甲吸收，不再只靠飞行中清零 fallDistance。
 		if (source.is(DamageTypes.FALL)) {
-			args.set(1, 0.0F);
+			args.set(2, 0.0F);
 			return;
 		}
 
@@ -98,7 +100,7 @@ public abstract class PlayerVariantDamageMixin {
 			scaled = variant.defenseProfile().scaleDamage(amount, flightCollision);
 		}
 		if (Float.isFinite(scaled) && scaled >= 0.0F) {
-			args.set(1, scaled);
+			args.set(2, scaled);
 		}
 	}
 

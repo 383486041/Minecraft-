@@ -3,23 +3,23 @@ package dev.codex.flightarmor.item;
 import dev.codex.flightarmor.FlightArmorMod;
 import dev.codex.flightarmor.variant.ArmorVariant;
 import dev.codex.flightarmor.variant.ArmorVariantData;
-import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
+import net.fabricmc.fabric.api.creativetab.v1.CreativeModeTabEvents;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.equipment.ArmorType;
 
 import java.util.Optional;
 
 public final class ModItems {
-	public static final FlightArmorItem FLIGHT_HELMET = register("flight_helmet", new FlightArmorItem(ArmorItem.Type.HELMET));
-	public static final FlightArmorItem FLIGHT_CHESTPLATE = register("flight_chestplate", new FlightArmorItem(ArmorItem.Type.CHESTPLATE));
-	public static final FlightArmorItem FLIGHT_LEGGINGS = register("flight_leggings", new FlightArmorItem(ArmorItem.Type.LEGGINGS));
-	public static final FlightArmorItem FLIGHT_BOOTS = register("flight_boots", new FlightArmorItem(ArmorItem.Type.BOOTS));
+	public static final FlightArmorItem FLIGHT_HELMET = register("flight_helmet", new FlightArmorItem(ArmorType.HELMET));
+	public static final FlightArmorItem FLIGHT_CHESTPLATE = register("flight_chestplate", new FlightArmorItem(ArmorType.CHESTPLATE));
+	public static final FlightArmorItem FLIGHT_LEGGINGS = register("flight_leggings", new FlightArmorItem(ArmorType.LEGGINGS));
+	public static final FlightArmorItem FLIGHT_BOOTS = register("flight_boots", new FlightArmorItem(ArmorType.BOOTS));
 	public static final ArmorNavigationCoreItem ARMOR_NAVIGATION_CORE = register("armor_navigation_core",
 			new ArmorNavigationCoreItem(new Item.Properties().stacksTo(1)));
 
@@ -27,7 +27,7 @@ public final class ModItems {
 	}
 
 	public static void initialize() {
-		ItemGroupEvents.modifyEntriesEvent(CreativeModeTabs.COMBAT).register(entries -> {
+		CreativeModeTabEvents.modifyOutputEvent(CreativeModeTabs.COMBAT).register(entries -> {
 			entries.accept(ARMOR_NAVIGATION_CORE);
 			for (ArmorVariant variant : ArmorVariant.values()) {
 				entries.accept(creativeVariantStack(FLIGHT_HELMET, variant));

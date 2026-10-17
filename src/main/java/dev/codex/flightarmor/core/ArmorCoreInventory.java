@@ -24,7 +24,7 @@ public final class ArmorCoreInventory implements Container {
 
 	private ArmorCoreSavedData data() {
 		if (owner instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
-			return ArmorCoreSavedData.get(serverPlayer.getServer());
+			return ArmorCoreSavedData.get(serverPlayer.level().getServer());
 		}
 		throw new IllegalStateException("Client-side armor core mirror has no SavedData");
 	}
@@ -133,8 +133,8 @@ public final class ArmorCoreInventory implements Container {
 
 	private void rejectLockedCoreChange() {
 		if (!(owner instanceof ServerPlayer serverPlayer)) return;
-		serverPlayer.displayClientMessage(Component.literal(
-				"战甲移动事务进行中，完成或回滚前不能更换导航核心"), true);
+		serverPlayer.sendOverlayMessage(Component.literal(
+				"战甲移动事务进行中，完成或回滚前不能更换导航核心"));
 		serverPlayer.inventoryMenu.sendAllDataToRemote();
 	}
 
@@ -148,6 +148,6 @@ public final class ArmorCoreInventory implements Container {
 	private void returnToOwner(ItemStack stack) {
 		if (stack.isEmpty() || !(owner instanceof ServerPlayer serverPlayer)) return;
 		serverPlayer.getInventory().add(stack);
-		if (!stack.isEmpty()) serverPlayer.drop(stack, false);
+		if (!stack.isEmpty()) serverPlayer.drop(stack, false, net.minecraft.util.Prediction.SERVER_ONLY);
 	}
 }

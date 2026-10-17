@@ -22,8 +22,8 @@ public final class CombatTargetPolicy {
 		}
 		// 巡航战甲第一版既不受伤也不阻挡射线，避免成为永久无敌盾牌。
 		if (living instanceof ArmorStand stand
-				&& (stand.getTags().contains(ArmorCruiseController.CARRIER_TAG)
-				|| stand.getTags().contains(ArmorEscortController.CARRIER_TAG))) {
+				&& (stand.entityTags().contains(ArmorCruiseController.CARRIER_TAG)
+				|| stand.entityTags().contains(ArmorEscortController.CARRIER_TAG))) {
 			return false;
 		}
 		return true;
@@ -36,11 +36,11 @@ public final class CombatTargetPolicy {
 			return false;
 		}
 		if (living instanceof ServerPlayer targetPlayer) {
-			return attacker.getServer().isPvpAllowed() && attacker.canHarmPlayer(targetPlayer);
+			return Boolean.TRUE.equals(attacker.level().getGameRules().get(net.minecraft.world.level.gamerules.GameRules.PVP)) && attacker.canHarmPlayer(targetPlayer);
 		}
 		if (attacker.isAlliedTo(living)) return false;
 		if (living instanceof TamableAnimal tamable
-				&& attacker.getUUID().equals(tamable.getOwnerUUID())) {
+				&& tamable.getOwnerReference() != null && attacker.getUUID().equals(tamable.getOwnerReference().getUUID())) {
 			return false;
 		}
 		return true;

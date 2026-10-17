@@ -58,7 +58,7 @@ public final class ArmorCruiseCombatController {
 
 	public static void handleCommand(ServerPlayer owner, ArmorCruiseCombatCommandPayload payload){
 		ArmorCruiseController.CombatHandle handle=ArmorCruiseController.combatHandle(owner);
-		long now=owner.serverLevel().getGameTime();
+		long now=owner.level().getGameTime();
 		if(handle==null||handle.phase()!=ArmorCruisePhase.CRUISING){
 			for(Map.Entry<CombatKey,CombatState> e:ownerStates(owner.getUUID())){
 				e.getValue().mode=CruiseCombatMode.PASSIVE;
@@ -182,7 +182,7 @@ public final class ArmorCruiseCombatController {
 
 	public static void cancel(ServerPlayer owner,String reason){
 		ArmorCruiseController.CombatHandle active=ArmorCruiseController.combatHandle(owner);
-		long now=owner.serverLevel().getGameTime();
+		long now=owner.level().getGameTime();
 		for(Map.Entry<CombatKey,CombatState> e:ownerStates(owner.getUUID())){
 			CombatState state=e.getValue();
 			state.mode=CruiseCombatMode.PASSIVE;
@@ -347,7 +347,7 @@ public final class ArmorCruiseCombatController {
 		if(sweep.hit()&&sweep.fraction()<=block){
 			carrier.setPos(carrier.position().add(delta.scale(sweep.fraction())));
 			carrier.setDeltaMovement(delta);
-			carrier.hasImpulse=true;
+			carrier.syncVelocity=true;
 			if(IndependentCruiseTactics.canCommit(state.actionSequence,state.completedRam)){
 				ArmorCombatController.CruiseWeaponResult result=
 						ArmorCombatController.tryCruiseImpact(owner,carrier,target,delta);
@@ -366,7 +366,7 @@ public final class ArmorCruiseCombatController {
 		}
 		carrier.setPos(carrier.position().add(delta));
 		carrier.setDeltaMovement(delta);
-		carrier.hasImpulse=true;
+		carrier.syncVelocity=true;
 		Vec3 end=center.add(delta);
 		if(elapsed>=DIVE_TICKS||VanguardRamKinematics.passedInterceptPlane(
 				end.x,end.y,end.z,state.intercept.x,state.intercept.y,state.intercept.z,
@@ -551,7 +551,7 @@ public final class ArmorCruiseCombatController {
 		}
 		carrier.setPos(carrier.position().add(delta));
 		carrier.setDeltaMovement(delta);
-		carrier.hasImpulse=true;
+		carrier.syncVelocity=true;
 		if(carrier.getBoundingBox().getCenter().y<=state.slamImpactPoint.y+0.20D){
 			state.slamImpactVelocity=delta;
 			carrier.setPos(state.slamImpactPoint.x,state.slamImpactPoint.y+0.02D,
@@ -778,7 +778,7 @@ public final class ArmorCruiseCombatController {
 		LivingEntity recent=owner.getLastHurtByMob();
 		boolean recentWindow=recent!=null
 				&&owner.tickCount-owner.getLastHurtByMobTimestamp()<=100;
-		List<LivingEntity> candidates=owner.serverLevel().getEntitiesOfClass(
+		List<LivingEntity> candidates=owner.level().getEntitiesOfClass(
 				LivingEntity.class,area,c->validTarget(owner,handle,profile,anchor,c));
 		List<IndependentCruiseThreatTable.Observation> observations=new ArrayList<>(candidates.size());
 		for(LivingEntity candidate:candidates){
@@ -792,7 +792,7 @@ public final class ArmorCruiseCombatController {
 		IndependentCruiseThreatTable.Selection selected=
 				state.threatTable.update(now,observations,state.targetId);
 		state.targetId=selected.targetEntityId();
-		Entity entity=state.targetId<0?null:owner.serverLevel().getEntity(state.targetId);
+		Entity entity=state.targetId<0?null:owner.level().getEntity(state.targetId);
 		return entity instanceof LivingEntity living?living:null;
 	}
 
@@ -846,8 +846,8 @@ public final class ArmorCruiseCombatController {
 	}
 
 	private static double clampFlightY(ArmorStand carrier,double desiredY){
-		return Mth.clamp(desiredY,carrier.level().getMinBuildHeight()+2.0D,
-				carrier.level().getMaxBuildHeight()-3.0D);
+		return Mth.clamp(desiredY,carrier.level().getMinY()+2.0D,
+				carrier.level().getMaxY()-3.0D);
 	}
 
 	private static Vec3 horizontalAway(Vec3 target,Vec3 carrier){
@@ -861,12 +861,12 @@ public final class ArmorCruiseCombatController {
 		if(step.lengthSqr()<1.0E-8){carrier.setDeltaMovement(Vec3.ZERO);return;}
 		carrier.setPos(carrier.position().add(step));
 		carrier.setDeltaMovement(step);
-		carrier.hasImpulse=true;
+		carrier.syncVelocity=true;
 	}
 
 	private static void holdCarrier(ArmorStand carrier){
 		carrier.setDeltaMovement(Vec3.ZERO);
-		carrier.hasImpulse=true;
+		carrier.syncVelocity=true;
 	}
 
 	private static double blockFraction(ArmorStand carrier,Vec3 start,Vec3 end){
@@ -881,7 +881,7 @@ public final class ArmorCruiseCombatController {
 		Vec3 center=target.getBoundingBox().getCenter();
 		Vec3 start=new Vec3(center.x,target.getBoundingBox().maxY+2.0D,center.z);
 		Vec3 end=new Vec3(center.x,
-				Math.max(carrier.level().getMinBuildHeight()+1.0D,target.getY()-6.0D),center.z);
+				Math.max(carrier.level().getMinY()+1.0D,target.getY()-6.0D),center.z);
 		HitResult hit=carrier.level().clip(new ClipContext(
 				start,end,ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,carrier));
 		if(hit.getType()==HitResult.Type.BLOCK)return hit.getLocation().add(0.0D,0.04D,0.0D);
@@ -1079,7 +1079,7 @@ public final class ArmorCruiseCombatController {
 	}
 
 	private static boolean isOwnersPet(ServerPlayer owner,LivingEntity target){
-		return target instanceof TamableAnimal pet&&owner.getUUID().equals(pet.getOwnerUUID());
+		return target instanceof TamableAnimal pet && pet.getOwnerReference() != null && owner.getUUID().equals(pet.getOwnerReference().getUUID());
 	}
 	public static void syncCarrierTo(Entity carrier,ServerPlayer recipient){
 		if(!(carrier instanceof ArmorStand stand))return;
@@ -1089,7 +1089,7 @@ public final class ArmorCruiseCombatController {
 				if(!carrier.getUUID().equals(state.carrierId))continue;
 				if(ServerPlayNetworking.canSend(recipient,ArmorCruiseCombatStatePayload.TYPE))
 					ServerPlayNetworking.send(recipient,payload(ownerId,carrier.getUUID(),
-							state.carrierRevision,state,recipient.serverLevel().getGameTime()));
+							state.carrierRevision,state,recipient.level().getGameTime()));
 			}
 		});
 	}
@@ -1102,7 +1102,7 @@ public final class ArmorCruiseCombatController {
 			if(ServerPlayNetworking.canSend(recipient,ArmorCruiseCombatStatePayload.TYPE)){
 				UUID carrier=state.carrierId==null?ArmorCruiseStatePayload.NO_CARRIER_ID:state.carrierId;
 				ServerPlayNetworking.send(recipient,payload(e.getKey().ownerId(),carrier,
-						state.carrierRevision,state,recipient.serverLevel().getGameTime()));
+						state.carrierRevision,state,recipient.level().getGameTime()));
 			}
 		}
 	}

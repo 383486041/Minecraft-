@@ -118,6 +118,6 @@ public final class ArmorWardrobeController {
 	}
 
 	private static void deny(ServerPlayer player, String message) {
-		player.displayClientMessage(Component.literal(message), true);
+		player.sendOverlayMessage(Component.literal(message));
 	}
 }

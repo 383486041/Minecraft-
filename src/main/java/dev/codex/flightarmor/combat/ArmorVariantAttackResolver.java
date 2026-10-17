@@ -217,11 +217,11 @@ final class ArmorVariantAttackResolver {
 			}
 			float falloff = (float) Mth.clamp(1.0D - horizontalDistance / radius, 0.0D, 1.0D);
 			float appliedDamage = damage * (0.34F + falloff * 0.66F);
-			if (!target.hurt(ModDamageTypes.gravityImpact(owner, carrier), appliedDamage)) continue;
+			if (!target.hurtOrSimulate(ModDamageTypes.gravityImpact(owner, carrier), appliedDamage)) continue;
 			knockAway(target, impact,
 					maximumKnockback * (0.48D + falloff * 0.72D),
 					0.42D + falloff * 0.54D);
-			target.hurtMarked = true;
+			target.syncVelocity = true;
 			affected++;
 		}
 		return affected;
@@ -284,7 +284,7 @@ final class ArmorVariantAttackResolver {
 			Vec3 origin = previous.getBoundingBox().getCenter();
 			AABB area = AABB.ofSize(origin, SWIFT_CHAIN_RADIUS * 2.0D,
 					SWIFT_CHAIN_RADIUS * 1.5D, SWIFT_CHAIN_RADIUS * 2.0D);
-			List<LivingEntity> candidates = attacker.serverLevel().getEntitiesOfClass(
+			List<LivingEntity> candidates = attacker.level().getEntitiesOfClass(
 					LivingEntity.class, area,
 					candidate -> !visited.contains(candidate.getId())
 							&& CombatTargetPolicy.canDamage(attacker, candidate));
@@ -339,7 +339,7 @@ final class ArmorVariantAttackResolver {
 		if (limitedProjection <= primaryProjection + 0.05D) return hit.endpoint();
 
 		AABB searchArea = new AABB(hit.origin(), limitedEnd).inflate(rayPadding + 0.35D);
-		List<LivingEntity> candidates = attacker.serverLevel().getEntitiesOfClass(
+		List<LivingEntity> candidates = attacker.level().getEntitiesOfClass(
 				LivingEntity.class, searchArea,
 				candidate -> candidate != attacker && candidate != primaryTarget
 						&& CombatTargetPolicy.canOcclude(attacker, candidate));
@@ -381,7 +381,7 @@ final class ArmorVariantAttackResolver {
 		if (!Double.isFinite(radius) || radius <= 0.0D
 				|| !Float.isFinite(maximumDamage) || maximumDamage <= 0.0F) return;
 		AABB area = AABB.ofSize(center, radius * 2.0D, radius * 2.0D, radius * 2.0D);
-		List<LivingEntity> candidates = attacker.serverLevel().getEntitiesOfClass(
+		List<LivingEntity> candidates = attacker.level().getEntitiesOfClass(
 				LivingEntity.class, area,
 				candidate -> candidate != attacker && candidate != primaryTarget
 						&& CombatTargetPolicy.canDamage(attacker, candidate));
@@ -420,7 +420,7 @@ final class ArmorVariantAttackResolver {
 			affected++;
 		}
 		AABB area = AABB.ofSize(center, radius * 2.0D, radius * 1.5D, radius * 2.0D);
-		List<LivingEntity> candidates = attacker.serverLevel().getEntitiesOfClass(
+		List<LivingEntity> candidates = attacker.level().getEntitiesOfClass(
 				LivingEntity.class, area,
 				candidate -> candidate != attacker && candidate != primaryTarget
 						&& CombatTargetPolicy.canDamage(attacker, candidate));
@@ -446,13 +446,13 @@ final class ArmorVariantAttackResolver {
 			int slowTicks, int slowAmplifier, double maximumKnockback, double lift, float falloff) {
 		int duration = Math.max(12, Mth.floor(slowTicks * (0.55F + falloff * 0.45F)));
 		target.addEffect(new MobEffectInstance(
-				MobEffects.MOVEMENT_SLOWDOWN, duration, slowAmplifier));
+				MobEffects.SLOWNESS, duration, slowAmplifier));
 		Vec3 velocity = target.getDeltaMovement();
 		target.setDeltaMovement(velocity.x * 0.42D,
 				Math.min(velocity.y, 0.18D), velocity.z * 0.42D);
 		knockAway(target, center,
 				maximumKnockback * (0.42D + falloff * 0.58D), lift * (0.70D + falloff * 0.30D));
-		target.hurtMarked = true;
+		target.syncVelocity = true;
 	}
 
 	private static void applyVanguardDiveLift(ServerPlayer attacker, Vec3 impact,
@@ -462,7 +462,7 @@ final class ArmorVariantAttackResolver {
 			double distance = horizontalDistance(center, impact);
 			if (distance > radius || isOccluded(attacker, impact.add(0.0D, 0.22D, 0.0D), center)) continue;
 			float falloff = (float) Mth.clamp(1.0D - distance / radius, 0.0D, 1.0D);
-			if (!target.hurt(ModDamageTypes.gravityImpact(attacker),
+			if (!target.hurtOrSimulate(ModDamageTypes.gravityImpact(attacker),
 					damage * (0.24F + falloff * 0.24F))) continue;
 			knockAway(target, impact,
 					ArmorCombatTuning.DIVE_IMPACT_MAX_KNOCKBACK * strength
@@ -480,8 +480,8 @@ final class ArmorVariantAttackResolver {
 		Entity direct = source == null ? attacker : source;
 		boolean ownerInvulnerable = attacker.isInvulnerable();
 		boolean directInvulnerable = direct.isInvulnerable();
-		if (!ownerInvulnerable) attacker.setInvulnerable(true);
-		if (direct != attacker && !directInvulnerable) direct.setInvulnerable(true);
+		if (!ownerInvulnerable) attacker.setPermanentlyInvulnerable(true);
+		if (direct != attacker && !directInvulnerable) direct.setPermanentlyInvulnerable(true);
 		ExplosionDamageCalculator targetFilter = new ExplosionDamageCalculator() {
 			@Override
 			public boolean shouldDamageEntity(Explosion explosion, Entity candidate) {
@@ -492,11 +492,11 @@ final class ArmorVariantAttackResolver {
 		};
 		try {
 			ArmorExplosionEffects.explodeWithLightReport(
-					attacker.serverLevel(), direct, damageSource, targetFilter,
+					attacker.level(), direct, damageSource, targetFilter,
 					center, power, false, interaction);
 		} finally {
-			if (direct != attacker && !directInvulnerable) direct.setInvulnerable(false);
-			if (!ownerInvulnerable) attacker.setInvulnerable(false);
+			if (direct != attacker && !directInvulnerable) direct.setPermanentlyInvulnerable(false);
+			if (!ownerInvulnerable) attacker.setPermanentlyInvulnerable(false);
 		}
 	}
 
@@ -513,7 +513,7 @@ final class ArmorVariantAttackResolver {
 		Vec3 laneStart = impact.subtract(axis.scale(rearReach));
 		Vec3 laneEnd = impact.add(axis.scale(forwardReach));
 		AABB area = new AABB(laneStart, laneEnd).inflate(halfWidth, Math.max(2.4D, radius * 0.70D), halfWidth);
-		List<LivingEntity> candidates = attacker.serverLevel().getEntitiesOfClass(
+		List<LivingEntity> candidates = attacker.level().getEntitiesOfClass(
 				LivingEntity.class, area, candidate -> CombatTargetPolicy.canDamage(attacker, candidate));
 		final Vec3 laneAxis = axis;
 		candidates.sort((left, right) -> Double.compare(
@@ -536,12 +536,12 @@ final class ArmorVariantAttackResolver {
 			float precision = (float) Mth.clamp(1.0D - lateralDistance / halfWidth, 0.0D, 1.0D);
 			float laneFalloff = (float) Mth.clamp(1.0D - Math.max(0.0D, projection) / forwardReach,
 					0.0D, 1.0D);
-			if (!target.hurt(ModDamageTypes.gravityImpact(attacker),
+			if (!target.hurtOrSimulate(ModDamageTypes.gravityImpact(attacker),
 					damage * (0.64F + precision * 0.26F + laneFalloff * 0.10F))) continue;
 			Vec3 velocity = target.getDeltaMovement().add(axis.scale(0.48D + strength * 0.52D))
 					.add(0.0D, 0.07D + strength * 0.05D, 0.0D);
 			target.setDeltaMovement(velocity);
-			target.hurtMarked = true;
+			target.syncVelocity = true;
 			affected++;
 		}
 	}
@@ -554,11 +554,11 @@ final class ArmorVariantAttackResolver {
 			double distance = horizontalDistance(center, impact);
 			if (distance > radius || isOccluded(attacker, impact.add(0.0D, 0.22D, 0.0D), center)) continue;
 			float falloff = (float) Mth.clamp(1.0D - distance / radius, 0.0D, 1.0D);
-			boolean hurt = target.hurt(ModDamageTypes.gravityImpact(attacker),
+			boolean hurt = target.hurtOrSimulate(ModDamageTypes.gravityImpact(attacker),
 					damage * (0.38F + falloff * 0.30F));
 			if (!hurt) continue;
 			int slowTicks = Mth.floor(46.0F + strength * 30.0F + falloff * 18.0F);
-			target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, slowTicks, 1));
+			target.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, slowTicks, 1));
 			Vec3 velocity = target.getDeltaMovement();
 			target.setDeltaMovement(velocity.x * 0.28D, Math.min(velocity.y, 0.10D), velocity.z * 0.28D);
 			knockAway(target, impact,
@@ -572,7 +572,7 @@ final class ArmorVariantAttackResolver {
 			double horizontalRadius, double verticalRadius) {
 		AABB area = AABB.ofSize(impact, horizontalRadius * 2.0D,
 				Math.max(3.0D, verticalRadius * 2.0D), horizontalRadius * 2.0D);
-		List<LivingEntity> candidates = attacker.serverLevel().getEntitiesOfClass(
+		List<LivingEntity> candidates = attacker.level().getEntitiesOfClass(
 				LivingEntity.class, area, candidate -> CombatTargetPolicy.canDamage(attacker, candidate));
 		candidates.sort((left, right) -> Double.compare(
 				horizontalDistanceSqr(left.getBoundingBox().getCenter(), impact),
@@ -598,25 +598,25 @@ final class ArmorVariantAttackResolver {
 			LivingEntity candidate, ArmorAttackType attackType, float damage) {
 		return switch (attackType) {
 			case HAND_BEAM_PULSE, HAND_BEAM_LANCE ->
-					candidate.hurt(ModDamageTypes.coreBeam(attacker, directSource), damage);
+					candidate.hurtOrSimulate(ModDamageTypes.coreBeam(attacker, directSource), damage);
 			case CORE_BEAM, CRUISE_CORE_BEAM ->
-					candidate.hurt(ModDamageTypes.coreBeam(attacker, directSource), damage);
+					candidate.hurtOrSimulate(ModDamageTypes.coreBeam(attacker, directSource), damage);
 			case GRAVITY_DIVE_IMPACT, CRUISE_RAM, CRUISE_GROUND_SLAM ->
-					candidate.hurt(ModDamageTypes.gravityImpact(attacker, directSource), damage);
+					candidate.hurtOrSimulate(ModDamageTypes.gravityImpact(attacker, directSource), damage);
 			case WRIST_GRAVITY_PULSE, ENERGY_BLADE_SLASH, ENERGY_BLADE_COMBO,
 					ENERGY_BLADE_TOGGLE, CRUISE_MISSILE_VOLLEY, INVALID ->
-					candidate.hurt(ModDamageTypes.gravityPulse(attacker, directSource), damage);
+					candidate.hurtOrSimulate(ModDamageTypes.gravityPulse(attacker, directSource), damage);
 		};
 	}
 
 	private static void knockAway(LivingEntity target, Vec3 center, double strength, double lift) {
 		if (strength > 0.0D) {
-			target.knockback(strength, center.x - target.getX(), center.z - target.getZ());
+			target.knockback(strength, center.x - target.getX(), center.z - target.getZ(), null, 0.0F);
 		}
 		if (lift > 0.0D) {
 			target.setDeltaMovement(target.getDeltaMovement().add(0.0D, lift, 0.0D));
 		}
-		target.hurtMarked = true;
+		target.syncVelocity = true;
 	}
 
 	private static double rayProjection(Vec3 origin, Vec3 direction, LivingEntity entity) {

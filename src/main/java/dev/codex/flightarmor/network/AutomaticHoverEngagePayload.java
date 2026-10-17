@@ -4,12 +4,12 @@ import dev.codex.flightarmor.FlightArmorMod;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 /** 服务端确认空中着装完成后，通知所属客户端接管现有悬停输入状态。 */
 public record AutomaticHoverEngagePayload(long engagementId, AutomaticHoverSource source,
 		long sourceSequenceId, long sourceAttemptId,
-		ResourceLocation dimension) implements CustomPacketPayload {
+		Identifier dimension) implements CustomPacketPayload {
 	public static final Type<AutomaticHoverEngagePayload> TYPE =
 			new Type<>(FlightArmorMod.id("automatic_hover_engage"));
 	public static final StreamCodec<RegistryFriendlyByteBuf, AutomaticHoverEngagePayload> STREAM_CODEC =
@@ -18,13 +18,13 @@ public record AutomaticHoverEngagePayload(long engagementId, AutomaticHoverSourc
 				buffer.writeByte(payload.source().networkId());
 				buffer.writeVarLong(payload.sourceSequenceId());
 				buffer.writeVarLong(payload.sourceAttemptId());
-				buffer.writeResourceLocation(payload.dimension());
+				buffer.writeIdentifier(payload.dimension());
 			}, buffer -> new AutomaticHoverEngagePayload(
 					buffer.readVarLong(),
 					AutomaticHoverSource.fromNetworkId(buffer.readUnsignedByte()),
 					buffer.readVarLong(),
 					buffer.readVarLong(),
-					buffer.readResourceLocation()));
+					buffer.readIdentifier()));
 
 	@Override
 	public Type<? extends CustomPacketPayload> type() {

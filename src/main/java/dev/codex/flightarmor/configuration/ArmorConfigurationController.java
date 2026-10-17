@@ -70,7 +70,7 @@ public final class ArmorConfigurationController {
 			return;
 		}
 
-		long now = player.serverLevel().getGameTime();
+		long now = player.level().getGameTime();
 		long lastToggle = LAST_TOGGLE_TICK.getOrDefault(player.getUUID(), Long.MIN_VALUE / 2L);
 		if (now - lastToggle < MIN_TOGGLE_GAP_TICKS) {
 			deny(player, "message.flight_armor.configuration.busy");
@@ -106,7 +106,7 @@ public final class ArmorConfigurationController {
 		String resultKey = nextMode == SentinelArmorMode.OVERDRIVE_FLIGHT
 				? "message.flight_armor.configuration.overdrive"
 				: "message.flight_armor.configuration.breach";
-		player.displayClientMessage(Component.translatable(resultKey), true);
+		player.sendOverlayMessage(Component.translatable(resultKey));
 	}
 
 	/** Server-authoritative M-key form switch for one selected cruise/escort carrier. */
@@ -130,7 +130,7 @@ public final class ArmorConfigurationController {
 			}
 			suitId = identity.suitId();
 		}
-		long now = owner.serverLevel().getGameTime();
+		long now = owner.level().getGameTime();
 		ItemStack chest = carrier.getItemBySlot(EquipmentSlot.CHEST);
 		ArmorConfigurationData.Snapshot current = ArmorConfigurationData.read(chest);
 		if (ArmorConfigurationAccess.isTransitioning(current, now)
@@ -200,6 +200,6 @@ public final class ArmorConfigurationController {
 	}
 
 	private static void deny(ServerPlayer player, String translationKey) {
-		player.displayClientMessage(Component.translatable(translationKey), true);
+		player.sendOverlayMessage(Component.translatable(translationKey));
 	}
 }

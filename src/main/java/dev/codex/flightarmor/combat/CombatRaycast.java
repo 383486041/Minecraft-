@@ -42,7 +42,7 @@ final class CombatRaycast {
 				: eyeHitBlock ? ArmorAttackHitKind.BLOCK : ArmorAttackHitKind.MISS;
 		Vec3 normal = target != null
 				? direction.scale(-1.0D)
-				: eyeHitBlock ? Vec3.atLowerCornerOf(eyeBlock.getDirection().getNormal()) : ZERO_NORMAL;
+				: eyeHitBlock ? eyeBlock.getDirection().getUnitVec3() : ZERO_NORMAL;
 
 		Vec3 origin = ArmorAnchorResolver.resolve(player, variant, pose,
 				ArmorSemanticAnchor.palm(leftHand), direction);
@@ -67,7 +67,7 @@ final class CombatRaycast {
 			target = null;
 			endpoint = wristBlock.getLocation();
 			hitKind = ArmorAttackHitKind.BLOCK;
-			normal = Vec3.atLowerCornerOf(wristBlock.getDirection().getNormal());
+			normal = wristBlock.getDirection().getUnitVec3();
 		}
 		return new Result(origin, endpoint, normal, hitKind, target);
 	}
@@ -99,7 +99,7 @@ final class CombatRaycast {
 		}
 		if (blockHit) {
 			return new Result(origin, block.getLocation(),
-					Vec3.atLowerCornerOf(block.getDirection().getNormal()), ArmorAttackHitKind.BLOCK, null);
+					block.getDirection().getUnitVec3(), ArmorAttackHitKind.BLOCK, null);
 		}
 		return new Result(origin, targetCenter, ZERO_NORMAL, ArmorAttackHitKind.MISS, null);
 	}

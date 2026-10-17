@@ -4,7 +4,7 @@ import dev.codex.flightarmor.FlightArmorMod;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.UUID;
@@ -19,7 +19,7 @@ import java.util.UUID;
  */
 public record SonicBoomFxPayload(
 		UUID flyerId,
-		ResourceLocation dimension,
+		Identifier dimension,
 		long eventId,
 		Vec3 origin,
 		Vec3 direction,
@@ -31,7 +31,7 @@ public record SonicBoomFxPayload(
 			StreamCodec.of(
 					(buffer, payload) -> {
 						buffer.writeUUID(payload.flyerId());
-						buffer.writeResourceLocation(payload.dimension());
+						buffer.writeIdentifier(payload.dimension());
 						buffer.writeVarLong(payload.eventId());
 						writeVec3(buffer, payload.origin());
 						writeVec3(buffer, payload.direction());
@@ -39,7 +39,7 @@ public record SonicBoomFxPayload(
 					},
 					buffer -> new SonicBoomFxPayload(
 							buffer.readUUID(),
-							buffer.readResourceLocation(),
+							buffer.readIdentifier(),
 							buffer.readVarLong(),
 							readVec3(buffer),
 							readVec3(buffer),

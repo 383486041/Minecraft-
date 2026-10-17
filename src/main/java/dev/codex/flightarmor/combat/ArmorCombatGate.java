@@ -155,7 +155,7 @@ public final class ArmorCombatGate {
 	/** 生命周期检查也供 tick 在穿脱/巡航状态突变时取消活动攻击姿势。 */
 	public static ArmorCombatDenyReason evaluateLifecycle(ServerPlayer player) {
 		return evaluateLifecycle(player, ArmorAttackType.INVALID,
-				player == null ? 0L : player.serverLevel().getGameTime());
+				player == null ? 0L : player.level().getGameTime());
 	}
 
 	/**
@@ -203,7 +203,7 @@ public final class ArmorCombatGate {
 				return ArmorCombatDenyReason.MISSING_FULL_SET;
 			}
 			if (ArmorConfigurationAccess.isTransitioning(
-					player, player.serverLevel().getGameTime())) {
+					player, player.level().getGameTime())) {
 				return ArmorCombatDenyReason.ATTACK_BUSY;
 			}
 		}

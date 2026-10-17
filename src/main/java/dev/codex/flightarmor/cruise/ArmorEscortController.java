@@ -63,10 +63,10 @@ public final class ArmorEscortController {
 	private static final String SUIT_TAG_PREFIX = "flight_armor_escort_suit_";
 	private static final int LAUNCH_TICKS = 9;
 	private static final int RETURN_TICKET_RADIUS = 2;
-	private static final TicketType<UUID> RETURN_TICKET =
-			TicketType.create("flight_armor_escort_return", UUID::compareTo);
-	private static final TicketType<UUID> RECOVERY_TICKET =
-			TicketType.create("flight_armor_escort_recovery", UUID::compareTo);
+	private static final TicketType RETURN_TICKET =
+			new TicketType(0L, TicketType.FLAG_LOADING | TicketType.FLAG_SIMULATION);
+	private static final TicketType RECOVERY_TICKET =
+			new TicketType(0L, TicketType.FLAG_LOADING | TicketType.FLAG_SIMULATION);
 	private static final Map<UUID, EscortState> STATES = new ConcurrentHashMap<>();
 	private static final Set<UUID> SPAWNING = ConcurrentHashMap.newKeySet();
 	private static final Set<UUID> MIGRATING = ConcurrentHashMap.newKeySet();
@@ -98,17 +98,17 @@ public final class ArmorEscortController {
 			return LaunchResult.failed("已有战甲切换或着装事务，不能同时启动副甲");
 		}
 		if (STATES.containsKey(suitId)) return LaunchResult.failed("该副战甲已经处于巡航状态");
-		if (ArmorEscortSavedData.find(owner.getServer(), suitId) != null) {
+		if (ArmorEscortSavedData.find(owner.level().getServer(), suitId) != null) {
 			return LaunchResult.failed("该副战甲存在待恢复载体，已拒绝生成新载体");
 		}
-		if (!escortCapacityAvailable(owner.getServer(), owner.getUUID(), suitId)) {
+		if (!escortCapacityAvailable(owner.level().getServer(), owner.getUUID(), suitId)) {
 			return LaunchResult.failed("\u540c\u4e00\u73a9\u5bb6\u6700\u591a\u540c\u65f6\u542f\u7528 7 \u5957\u62a4\u822a\u6218\u7532");
 		}
 		ChargingPlatformController.EscortTransfer transfer =
 				ChargingPlatformController.extractForEscort(owner, suitId, platformId);
 		if (!transfer.success()) return LaunchResult.failed(transfer.message());
 
-		ServerLevel originLevel = owner.getServer().getLevel(transfer.originDimension());
+		ServerLevel originLevel = owner.level().getServer().getLevel(transfer.originDimension());
 		if (originLevel == null) {
 			ChargingPlatformController.rollbackEscortTransfer(owner, transfer);
 			return LaunchResult.failed("副战甲所在维度不可用");
@@ -149,7 +149,7 @@ public final class ArmorEscortController {
 			ChargingPlatformController.rollbackEscortTransfer(owner, transfer);
 			return LaunchResult.failed("副战甲持久索引冲突，物品已返回平台");
 		}
-		broadcast(owner.getServer(), state, true);
+		broadcast(owner.level().getServer(), state, true);
 		return LaunchResult.success(suitId);
 	}
 
@@ -172,10 +172,10 @@ public final class ArmorEscortController {
 				|| !owner.isAlive() || owner.isSpectator()) {
 			return EscortCommandResult.failed("独立巡航转护航参数不完整");
 		}
-		if (!escortCapacityAvailable(owner.getServer(), owner.getUUID(), suitId)) {
+		if (!escortCapacityAvailable(owner.level().getServer(), owner.getUUID(), suitId)) {
 			return EscortCommandResult.failed("\u62a4\u822a\u6218\u7532\u5df2\u8fbe\u540c\u65f6\u542f\u7528\u4e0a\u9650");
 		}
-		if (ArmorEscortSavedData.find(owner.getServer(), suitId) != null) {
+		if (ArmorEscortSavedData.find(owner.level().getServer(), suitId) != null) {
 			return EscortCommandResult.failed("该战甲存在待恢复护航载体，不能覆盖持久索引");
 		}
 		if (STATES.containsKey(suitId) || carrier.isRemoved() || !carrier.isAlive()
@@ -203,7 +203,7 @@ public final class ArmorEscortController {
 		carrier.removeTag(ArmorCruiseController.CARRIER_TAG);
 		carrier.removeTag(ArmorCruiseController.OWNER_TAG_PREFIX + owner.getUUID());
 		configureCarrier(carrier, owner.getUUID(), suitId);
-		broadcast(owner.getServer(), state, true);
+		broadcast(owner.level().getServer(), state, true);
 		return EscortCommandResult.started("独立巡航战甲已无缝接入副甲护航编队");
 	}
 
@@ -220,7 +220,7 @@ public final class ArmorEscortController {
 				|| !owner.isAlive() || owner.isSpectator()) {
 			return EscortCommandResult.failed("独立巡航返台参数不完整");
 		}
-		if (ArmorEscortSavedData.find(owner.getServer(), suitId) != null) {
+		if (ArmorEscortSavedData.find(owner.level().getServer(), suitId) != null) {
 			return EscortCommandResult.failed("该战甲存在待恢复护航载体，不能覆盖持久索引");
 		}
 		if (STATES.containsKey(suitId) || carrier.isRemoved() || !carrier.isAlive()
@@ -249,7 +249,7 @@ public final class ArmorEscortController {
 		configureCarrier(carrier, owner.getUUID(), suitId);
 		setCombatLifecycleReady(state, false);
 		updateReturnTicket(state);
-		broadcast(owner.getServer(), state, true);
+		broadcast(owner.level().getServer(), state, true);
 		return EscortCommandResult.started("独立巡航战甲已直接开始返航原平台");
 	}
 
@@ -343,7 +343,7 @@ public final class ArmorEscortController {
 				|| owner.isSpectator() || !owner.isAlive() || owner.level() != state.carrier.level()
 				|| !hasFullSet(state.carrier)
 				|| !ArmorIntegrityController.canAttack(
-						owner.getServer(), state.ownerId, state.suitId)) return false;
+						owner.level().getServer(), state.ownerId, state.suitId)) return false;
 		return ArmorCoreController.escortProfile(owner, suitId).attackMode()
 				!= ArmorEscortProfile.CombatPolicy.OFF;
 	}
@@ -380,11 +380,11 @@ public final class ArmorEscortController {
 		}
 		if (state.phase == Phase.EQUIPPING) {
 			state.phase = Phase.ESCORTING;
-			state.phaseStartTick = owner.serverLevel().getGameTime();
+			state.phaseStartTick = owner.level().getGameTime();
 		}
 		state.guardEnabled = true;
 		state.combatTarget = null;
-		broadcast(owner.getServer(), state, true);
+		broadcast(owner.level().getServer(), state, true);
 		return EscortCommandResult.started("目标护航战甲已撤销着装并恢复护航");
 	}
 
@@ -426,11 +426,11 @@ public final class ArmorEscortController {
 		if (STATES.containsKey(suitId)) {
 			return SwitchDeploymentResult.failed("这套战甲已经拥有护航载体");
 		}
-		if (ArmorEscortSavedData.find(owner.getServer(), suitId) != null) {
+		if (ArmorEscortSavedData.find(owner.level().getServer(), suitId) != null) {
 			return SwitchDeploymentResult.failed("这套战甲存在待恢复护航载体");
 		}
 		if (launchWithGuard
-				&& !escortCapacityAvailable(owner.getServer(), owner.getUUID(), suitId)) {
+				&& !escortCapacityAvailable(owner.level().getServer(), owner.getUUID(), suitId)) {
 			return SwitchDeploymentResult.failed("护航战甲已达同时启用上限");
 		}
 
@@ -461,7 +461,7 @@ public final class ArmorEscortController {
 		SPAWNING.add(carrier.getUUID());
 		boolean spawned;
 		try {
-			spawned = owner.serverLevel().addFreshEntity(carrier);
+			spawned = owner.level().addFreshEntity(carrier);
 		} finally {
 			SPAWNING.remove(carrier.getUUID());
 		}
@@ -494,7 +494,7 @@ public final class ArmorEscortController {
 					: "战甲释放异常，物品已保守留存但位置账本需要恢复");
 		}
 
-		long now = owner.serverLevel().getGameTime();
+		long now = owner.level().getGameTime();
 		EscortState state = new EscortState(
 				owner.getUUID(), suitId, carrier,
 				launchWithGuard ? Phase.LAUNCHING : Phase.ESCORTING,
@@ -520,7 +520,7 @@ public final class ArmorEscortController {
 		FlightController.remove(owner);
 		owner.getInventory().setChanged();
 		owner.containerMenu.broadcastChanges();
-		broadcast(owner.getServer(), state, true);
+		broadcast(owner.level().getServer(), state, true);
 		return SwitchDeploymentResult.started();
 	}
 
@@ -552,7 +552,7 @@ public final class ArmorEscortController {
 			ItemStack original = originals.getOrDefault(slot, ItemStack.EMPTY);
 			if (!current.isEmpty() && current != original) foreignSlots.add(slot);
 		}
-		for (int index = 0; index < owner.getInventory().items.size()
+		for (int index = 0; index < owner.getInventory().getNonEquipmentItems().size()
 				&& freeInventorySlots.size() < foreignSlots.size(); index++) {
 			if (owner.getInventory().getItem(index).isEmpty()) freeInventorySlots.add(index);
 		}
@@ -588,15 +588,15 @@ public final class ArmorEscortController {
 		if (STATES.containsKey(suitId)) {
 			return SwitchDeploymentResult.failed("The outgoing suit already has an escort carrier");
 		}
-		if (ArmorEscortSavedData.find(owner.getServer(), suitId) != null) {
+		if (ArmorEscortSavedData.find(owner.level().getServer(), suitId) != null) {
 			return SwitchDeploymentResult.failed("The outgoing suit has a persisted carrier awaiting recovery");
 		}
 
 		EnumMap<EquipmentSlot, Integer> sourceSlots = new EnumMap<>(EquipmentSlot.class);
 		for (EquipmentSlot slot : ChargingPlatformBlockEntity.ARMOR_SLOTS) {
 			int found = -1;
-			for (int index = 0; index < owner.getInventory().items.size(); index++) {
-				if (!ArmorIdentity.belongsTo(owner.getInventory().items.get(index),
+			for (int index = 0; index < owner.getInventory().getNonEquipmentItems().size(); index++) {
+				if (!ArmorIdentity.belongsTo(owner.getInventory().getNonEquipmentItems().get(index),
 						owner.getUUID(), suitId, slot)) continue;
 				if (found >= 0) return SwitchDeploymentResult.failed(
 						"Duplicate claimed armor part detected; switch canceled");
@@ -640,7 +640,7 @@ public final class ArmorEscortController {
 		SPAWNING.add(carrier.getUUID());
 		boolean spawned;
 		try {
-			spawned = owner.serverLevel().addFreshEntity(carrier);
+			spawned = owner.level().addFreshEntity(carrier);
 		} finally {
 			SPAWNING.remove(carrier.getUUID());
 		}
@@ -653,7 +653,7 @@ public final class ArmorEscortController {
 					: "Outgoing armor carrier failed and its position ledger requires recovery");
 		}
 
-		long now = owner.serverLevel().getGameTime();
+		long now = owner.level().getGameTime();
 		EscortState state = new EscortState(owner.getUUID(), suitId, carrier, Phase.ESCORTING,
 				now, spawnPosition, false, homePlatformId, homeDimension, homePos,
 				ChargingPlatformDisplayMode.ASSEMBLED);
@@ -678,7 +678,7 @@ public final class ArmorEscortController {
 		}
 		owner.getInventory().setChanged();
 		owner.containerMenu.broadcastChanges();
-		broadcast(owner.getServer(), state, true);
+		broadcast(owner.level().getServer(), state, true);
 		return SwitchDeploymentResult.started();
 	}
 
@@ -704,7 +704,7 @@ public final class ArmorEscortController {
 			if (destination != null && owner.getInventory().getItem(destination).isEmpty()) {
 				owner.getInventory().setItem(destination, stack);
 			} else if (!owner.getInventory().add(stack)) {
-				owner.drop(stack, false);
+				owner.drop(stack, false, net.minecraft.util.Prediction.SERVER_ONLY);
 			}
 		}
 		owner.getInventory().setChanged();
@@ -755,7 +755,7 @@ public final class ArmorEscortController {
 		if (state.phase == Phase.EQUIPPING) {
 			return EscortCommandResult.failed("所选战甲正在贴近主人并着装");
 		}
-		ServerLevel home = owner.getServer().getLevel(dimension);
+		ServerLevel home = owner.level().getServer().getLevel(dimension);
 		if (home == null) return EscortCommandResult.failed("绑定平台所在维度不可用");
 		home.getChunkAt(pos);
 		if (!(home.getBlockEntity(pos) instanceof ChargingPlatformBlockEntity platform)
@@ -773,9 +773,9 @@ public final class ArmorEscortController {
 		invalidateDelayedAttacks(state);
 		state.guardEnabled = false;
 		state.phase = Phase.RETURNING;
-		state.phaseStartTick = owner.serverLevel().getGameTime();
+		state.phaseStartTick = owner.level().getGameTime();
 		updateReturnTicket(state);
-		broadcast(owner.getServer(), state, true);
+		broadcast(owner.level().getServer(), state, true);
 		return EscortCommandResult.started("护卫已停止战斗，正在返回原绑定平台");
 	}
 
@@ -802,14 +802,14 @@ public final class ArmorEscortController {
 		invalidateDelayedAttacks(state);
 		state.guardEnabled = false;
 		state.phase = Phase.EQUIPPING;
-		state.phaseStartTick = owner.serverLevel().getGameTime();
-		broadcast(owner.getServer(), state, true);
+		state.phaseStartTick = owner.level().getGameTime();
+		broadcast(owner.level().getServer(), state, true);
 		return EscortCommandResult.started("核心主甲已脱离护卫编队，正在近身着装");
 	}
 
 
 	public static boolean isEscortCarrier(Entity entity) {
-		return entity instanceof ArmorStand && entity.getTags().contains(CARRIER_TAG);
+		return entity instanceof ArmorStand && entity.entityTags().contains(CARRIER_TAG);
 	}
 	private static long nextActionSequence(long current) {
 		return current <= 0L || current == Long.MAX_VALUE ? 1L : current + 1L;
@@ -1050,8 +1050,8 @@ public final class ArmorEscortController {
 		releaseReturnTicket(state);
 		if (removed) broadcast(server, state, false);
 		state.carrier.discard();
-		owner.displayClientMessage(net.minecraft.network.chat.Component.literal(
-				"护卫已平滑落台并恢复整甲待机"), true);
+		owner.sendOverlayMessage(net.minecraft.network.chat.Component.literal(
+				"护卫已平滑落台并恢复整甲待机"));
 		ArmorCoreController.sendSnapshot(owner);
 	}
 
@@ -1066,7 +1066,7 @@ public final class ArmorEscortController {
 		releaseReturnTicket(state);
 		broadcast(server, state, true);
 		if (owner != null) {
-			owner.displayClientMessage(net.minecraft.network.chat.Component.literal(message), true);
+			owner.sendOverlayMessage(net.minecraft.network.chat.Component.literal(message));
 			ArmorCoreController.sendSnapshot(owner);
 		}
 	}
@@ -1080,7 +1080,7 @@ public final class ArmorEscortController {
 			if (!migrateToOwner(owner, state)) return;
 			state.phase = Phase.EQUIPPING;
 			state.phaseStartTick = now;
-			broadcast(owner.getServer(), state, true);
+			broadcast(owner.level().getServer(), state, true);
 		}
 		Vec3 target = owner.position().add(0.0D, 0.45D, 0.0D);
 		double distance = state.carrier.position().distanceTo(target);
@@ -1097,21 +1097,21 @@ public final class ArmorEscortController {
 			state.phase = Phase.ESCORTING;
 			state.guardEnabled = true;
 			state.phaseStartTick = now;
-			owner.displayClientMessage(net.minecraft.network.chat.Component.literal(result.message()), true);
-			broadcast(owner.getServer(), state, true);
+			owner.sendOverlayMessage(net.minecraft.network.chat.Component.literal(result.message()));
+			broadcast(owner.level().getServer(), state, true);
 			ArmorCoreController.sendSnapshot(owner);
 			return;
 		}
 		boolean removed = STATES.remove(state.suitId, state);
-		removeLocatorAfterCommit(owner.getServer(), state);
-		if (removed) broadcast(owner.getServer(), state, false);
+		removeLocatorAfterCommit(owner.level().getServer(), state);
+		if (removed) broadcast(owner.level().getServer(), state, false);
 		state.carrier.discard();
 		boolean animated = ArmorAssemblyController.beginAssemblyForEquippedSet(owner);
 		FlightPhysics.applyPreBootFallArrest(owner);
-		owner.hurtMarked = true;
-		owner.displayClientMessage(net.minecraft.network.chat.Component.literal(animated
+		owner.syncVelocity = true;
+		owner.sendOverlayMessage(net.minecraft.network.chat.Component.literal(animated
 				? "核心主甲已贴近并开始整体着装"
-				: "核心主甲已完成物品交接"), true);
+				: "核心主甲已完成物品交接"));
 		ArmorCoreController.sendSnapshot(owner);
 	}
 
@@ -1152,7 +1152,7 @@ public final class ArmorEscortController {
 					: Double.POSITIVE_INFINITY;
 			state.phase = distance > 12.0D ? Phase.TRANSIT : Phase.ESCORTING;
 			state.phaseStartTick = now;
-			broadcast(owner.getServer(), state, true);
+			broadcast(owner.level().getServer(), state, true);
 		}
 	}
 
@@ -1162,16 +1162,16 @@ public final class ArmorEscortController {
 		MIGRATING.add(state.suitId);
 		try {
 			Vec3 reentry = owner.position().subtract(owner.getLookAngle().scale(18.0D)).add(0.0D, 5.0D, 0.0D);
-			Entity changed = state.carrier.changeDimension(new net.minecraft.world.level.portal.DimensionTransition(
-					owner.serverLevel(), reentry, Vec3.ZERO, owner.getYRot(), 0.0F,
-					net.minecraft.world.level.portal.DimensionTransition.DO_NOTHING));
+			Entity changed = state.carrier.teleport(new net.minecraft.world.level.portal.TeleportTransition(
+					owner.level(), reentry, Vec3.ZERO, owner.getYRot(), 0.0F,
+					net.minecraft.world.level.portal.TeleportTransition.DO_NOTHING));
 			if (!(changed instanceof ArmorStand stand)) return false;
 			configureCarrier(stand, state.ownerId, state.suitId);
 			stand.setPos(reentry.x, reentry.y, reentry.z);
 			state.carrier = stand;
 			state.carrierRevision = NEXT_CARRIER_REVISION.incrementAndGet();
 			state.phase = Phase.TRANSIT;
-			broadcast(owner.getServer(), state, true);
+			broadcast(owner.level().getServer(), state, true);
 			return true;
 		} finally {
 			MIGRATING.remove(state.suitId);
@@ -1183,10 +1183,10 @@ public final class ArmorEscortController {
 		setCombatLifecycleReady(state, false);
 		MIGRATING.add(state.suitId);
 		try {
-			Entity changed = state.carrier.changeDimension(
-					new net.minecraft.world.level.portal.DimensionTransition(
+			Entity changed = state.carrier.teleport(
+					new net.minecraft.world.level.portal.TeleportTransition(
 							destination, reentry, Vec3.ZERO, state.carrier.getYRot(), 0.0F,
-							net.minecraft.world.level.portal.DimensionTransition.DO_NOTHING));
+							net.minecraft.world.level.portal.TeleportTransition.DO_NOTHING));
 			if (!(changed instanceof ArmorStand stand)) return false;
 			configureCarrier(stand, state.ownerId, state.suitId);
 			stand.setPos(reentry.x, reentry.y, reentry.z);
@@ -1210,10 +1210,10 @@ public final class ArmorEscortController {
 		try {
 			Vec3 anchor = Vec3.atBottomCenterOf(profile.holdPosition()).add(0.0D, 1.15D, 0.0D);
 			Vec3 reentry = anchor.add(0.0D, 4.0D, -8.0D);
-			Entity changed = state.carrier.changeDimension(
-					new net.minecraft.world.level.portal.DimensionTransition(
+			Entity changed = state.carrier.teleport(
+					new net.minecraft.world.level.portal.TeleportTransition(
 							destination, reentry, Vec3.ZERO, state.carrier.getYRot(), 0.0F,
-							net.minecraft.world.level.portal.DimensionTransition.DO_NOTHING));
+							net.minecraft.world.level.portal.TeleportTransition.DO_NOTHING));
 			if (!(changed instanceof ArmorStand stand)) return false;
 			configureCarrier(stand, state.ownerId, state.suitId);
 			stand.setPos(reentry.x, reentry.y, reentry.z);
@@ -1248,7 +1248,7 @@ public final class ArmorEscortController {
 				|| !state.guardEnabled || profile.attackMode() == ArmorEscortProfile.CombatPolicy.OFF
 				|| state.carrier.level() != owner.level()
 				|| !ArmorIntegrityController.canAttack(
-						owner.getServer(), state.ownerId, state.suitId)) {
+						owner.level().getServer(), state.ownerId, state.suitId)) {
 			state.combatTarget = null;
 			return null;
 		}
@@ -1422,7 +1422,7 @@ public final class ArmorEscortController {
 							owner, state.carrier, target, candidateDelta);
 			long delay = result.fired() ? 8L : 4L;
 			state.nextAttackTick = now + ArmorIntegrityController.scaledAttackDelay(
-					owner.getServer(), state.ownerId, state.suitId, delay);
+					owner.level().getServer(), state.ownerId, state.suitId, delay);
 			markVanguardOutcome(state, VanguardRamPhase.IMPACT,
 					result.fired() ? VanguardRamResult.HIT : VanguardRamResult.CONTACT, now);
 			return;
@@ -1518,7 +1518,7 @@ public final class ArmorEscortController {
 							activeCombatSuitCount(owner, ArmorVariant.VANGUARD))
 					: ArmorEscortAi.retryDelay(ArmorVariant.VANGUARD);
 			state.nextAttackTick = now + ArmorIntegrityController.scaledAttackDelay(
-					owner.getServer(), state.ownerId, state.suitId, delay);
+					owner.level().getServer(), state.ownerId, state.suitId, delay);
 		}
 		if (elapsed >= 12L) resetVanguardRam(state);
 	}
@@ -1568,7 +1568,7 @@ public final class ArmorEscortController {
 				? ArmorEscortAi.successfulFireDelay(variant, activeCombatSuitCount(owner, variant))
 				: ArmorEscortAi.retryDelay(variant);
 		state.nextAttackTick = now + ArmorIntegrityController.scaledAttackDelay(
-				owner.getServer(), state.ownerId, state.suitId, delay);
+				owner.level().getServer(), state.ownerId, state.suitId, delay);
 	}
 
 	private static boolean tryTacticalWeapon(ServerPlayer owner, EscortState state,
@@ -1658,7 +1658,7 @@ public final class ArmorEscortController {
 		carrier.addTag(CARRIER_TAG);
 		carrier.addTag(OWNER_TAG_PREFIX + ownerId);
 		carrier.addTag(SUIT_TAG_PREFIX + suitId);
-		carrier.setInvulnerable(true);
+		carrier.setPermanentlyInvulnerable(true);
 		carrier.setSilent(true);
 		carrier.setNoGravity(true);
 		carrier.noPhysics = true;
@@ -1709,8 +1709,8 @@ public final class ArmorEscortController {
 	public static void handleJoin(ServerPlayer player) {
 		if (player == null) return;
 		for (ArmorEscortSavedData.Locator locator :
-				ArmorEscortSavedData.findByOwner(player.getServer(), player.getUUID())) {
-			restoreIndexedCarrier(player.getServer(), locator, player);
+				ArmorEscortSavedData.findByOwner(player.level().getServer(), player.getUUID())) {
+			restoreIndexedCarrier(player.level().getServer(), locator, player);
 		}
 	}
 
@@ -1749,7 +1749,7 @@ public final class ArmorEscortController {
 		if (level == null) {
 			FlightArmorMod.LOGGER.error(
 					"护航索引指向不存在的维度 suit={} carrier={} dimension={}",
-					locator.suitId(), locator.carrierId(), locator.dimension().location());
+					locator.suitId(), locator.carrierId(), locator.dimension().identifier());
 			return false;
 		}
 		if (onlineOwner != null && !onlineOwner.getUUID().equals(locator.ownerId())) {
@@ -1766,11 +1766,11 @@ public final class ArmorEscortController {
 				for (int dz = -radius; dz <= radius; dz++) {
 					if (radius > 0 && Math.max(Math.abs(dx), Math.abs(dz)) != radius) continue;
 					ChunkPos candidateChunk =
-							new ChunkPos(indexedChunk.x + dx, indexedChunk.z + dz);
-					level.getChunkSource().addRegionTicket(
-							RECOVERY_TICKET, candidateChunk, RETURN_TICKET_RADIUS, locator.carrierId());
+							new ChunkPos(indexedChunk.x() + dx, indexedChunk.z() + dz);
+					level.getChunkSource().addTicketWithRadius(
+							RECOVERY_TICKET, candidateChunk, RETURN_TICKET_RADIUS);
 					try {
-						level.getChunk(candidateChunk.x, candidateChunk.z);
+						level.getChunk(candidateChunk.x(), candidateChunk.z());
 						Entity entity = level.getEntity(locator.carrierId());
 						if (entity instanceof ArmorStand stand) {
 							found = stand;
@@ -1778,9 +1778,8 @@ public final class ArmorEscortController {
 							break;
 						}
 					} finally {
-						level.getChunkSource().removeRegionTicket(
-								RECOVERY_TICKET, candidateChunk,
-								RETURN_TICKET_RADIUS, locator.carrierId());
+						level.getChunkSource().removeTicketWithRadius(
+								RECOVERY_TICKET, candidateChunk, RETURN_TICKET_RADIUS);
 					}
 				}
 			}
@@ -1883,7 +1882,7 @@ public final class ArmorEscortController {
 			long carrierRevision = NEXT_CARRIER_REVISION.incrementAndGet();
 			effective = new ArmorEscortSavedData.Locator(
 					ownerId, suitId, stand.getUUID(), level.dimension(),
-					stand.chunkPosition().x, stand.chunkPosition().z,
+					stand.chunkPosition().x(), stand.chunkPosition().z(),
 					ArmorEscortSavedData.StoredPhase.ESCORTING,
 					null, null, null, ChargingPlatformDisplayMode.ASSEMBLED,
 					true, 1L, carrierRevision);
@@ -1895,7 +1894,7 @@ public final class ArmorEscortController {
 		} else {
 			ArmorEscortSavedData.Locator relocated = new ArmorEscortSavedData.Locator(
 					effective.ownerId(), effective.suitId(), effective.carrierId(), level.dimension(),
-					stand.chunkPosition().x, stand.chunkPosition().z, effective.phase(),
+					stand.chunkPosition().x(), stand.chunkPosition().z(), effective.phase(),
 					effective.homePlatformId(), effective.homeDimension(), effective.homePos(),
 					effective.displayMode(), effective.guardRequested(),
 					effective.revision() + 1L, effective.carrierRevision());
@@ -1961,7 +1960,7 @@ public final class ArmorEscortController {
 		long nextRevision = state.persistenceRevision + 1L;
 		ArmorEscortSavedData.Locator locator = new ArmorEscortSavedData.Locator(
 				state.ownerId, state.suitId, state.carrier.getUUID(), level.dimension(),
-				state.carrier.chunkPosition().x, state.carrier.chunkPosition().z, storedPhase,
+				state.carrier.chunkPosition().x(), state.carrier.chunkPosition().z(), storedPhase,
 				completeHome ? state.homePlatformId : null,
 				completeHome ? state.homeDimension : null,
 				completeHome ? state.homePos : null,
@@ -2017,11 +2016,11 @@ public final class ArmorEscortController {
 		if (level == state.returnTicketLevel && nextChunk.equals(state.returnTicketChunk)) return;
 
 		// Acquire the destination ticket first so controller handoff and cross-chunk travel have no gap.
-		level.getChunkSource().addRegionTicket(
-				RETURN_TICKET, nextChunk, RETURN_TICKET_RADIUS, state.suitId);
+		level.getChunkSource().addTicketWithRadius(
+				RETURN_TICKET, nextChunk, RETURN_TICKET_RADIUS);
 		if (state.returnTicketLevel != null && state.returnTicketChunk != null) {
-			state.returnTicketLevel.getChunkSource().removeRegionTicket(
-					RETURN_TICKET, state.returnTicketChunk, RETURN_TICKET_RADIUS, state.suitId);
+			state.returnTicketLevel.getChunkSource().removeTicketWithRadius(
+					RETURN_TICKET, state.returnTicketChunk, RETURN_TICKET_RADIUS);
 		}
 		state.returnTicketLevel = level;
 		state.returnTicketChunk = nextChunk;
@@ -2029,8 +2028,8 @@ public final class ArmorEscortController {
 
 	private static void releaseReturnTicket(EscortState state) {
 		if (state != null && state.returnTicketLevel != null && state.returnTicketChunk != null) {
-			state.returnTicketLevel.getChunkSource().removeRegionTicket(
-					RETURN_TICKET, state.returnTicketChunk, RETURN_TICKET_RADIUS, state.suitId);
+			state.returnTicketLevel.getChunkSource().removeTicketWithRadius(
+					RETURN_TICKET, state.returnTicketChunk, RETURN_TICKET_RADIUS);
 			state.returnTicketLevel = null;
 			state.returnTicketChunk = null;
 		}
@@ -2068,7 +2067,7 @@ public final class ArmorEscortController {
 	}
 
 	private static Optional<UUID> idFromTag(ArmorStand stand, String prefix) {
-		for (String tag : stand.getTags()) if (tag.startsWith(prefix)) {
+		for (String tag : stand.entityTags()) if (tag.startsWith(prefix)) {
 			try { return Optional.of(UUID.fromString(tag.substring(prefix.length()))); }
 			catch (IllegalArgumentException ignored) {}
 		}

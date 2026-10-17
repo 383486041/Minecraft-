@@ -108,7 +108,7 @@ public final class ArmorIlluminationController {
 	}
 
 	private static void tickPlayer(ServerPlayer player) {
-		ServerLevel level = player.serverLevel();
+		ServerLevel level = player.level();
 		BlockPos target = player.blockPosition();
 		PlacedLight current = PLACED.get(player.getUUID());
 		if (current != null && current.follows(level, target)) return;

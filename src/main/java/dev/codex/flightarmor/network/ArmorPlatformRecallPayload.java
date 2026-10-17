@@ -6,7 +6,7 @@ import dev.codex.flightarmor.platform.ChargingPlatformDisplayMode;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.UUID;
@@ -15,7 +15,7 @@ import java.util.UUID;
 public record ArmorPlatformRecallPayload(
 		UUID playerId,
 		long recallSequence,
-		ResourceLocation originDimension,
+		Identifier originDimension,
 		Vec3 origin,
 		ChargingPlatformDisplayMode displayMode,
 		long startGameTime,
@@ -35,7 +35,7 @@ public record ArmorPlatformRecallPayload(
 					(buffer, payload) -> {
 						buffer.writeUUID(payload.playerId());
 						buffer.writeVarLong(payload.recallSequence());
-						buffer.writeResourceLocation(payload.originDimension());
+						buffer.writeIdentifier(payload.originDimension());
 						writeVec3(buffer, payload.origin());
 						buffer.writeVarInt(payload.displayMode().ordinal());
 						buffer.writeVarLong(payload.startGameTime());
@@ -44,7 +44,7 @@ public record ArmorPlatformRecallPayload(
 					buffer -> new ArmorPlatformRecallPayload(
 							buffer.readUUID(),
 							buffer.readVarLong(),
-							buffer.readResourceLocation(),
+							buffer.readIdentifier(),
 							readVec3(buffer),
 							modeFromNetwork(buffer.readVarInt()),
 							buffer.readVarLong(),

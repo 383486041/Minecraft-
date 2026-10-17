@@ -1,18 +1,19 @@
 package dev.codex.flightarmor.cruise;
 
+import dev.codex.flightarmor.FlightArmorMod;
 import dev.codex.flightarmor.platform.ChargingPlatformDisplayMode;
+import dev.codex.flightarmor.util.TagUtils;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -28,15 +29,16 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 final class ArmorEscortSavedData extends SavedData {
 	private static final String DATA_NAME = "flight_armor_escort_index";
-	private static final SavedData.Factory<ArmorEscortSavedData> FACTORY = new SavedData.Factory<>(
+	private static final SavedDataType<ArmorEscortSavedData> TYPE = new SavedDataType<>(
+			FlightArmorMod.id(DATA_NAME),
 			ArmorEscortSavedData::new,
-			ArmorEscortSavedData::load,
+			CompoundTag.CODEC.xmap(ArmorEscortSavedData::load, data -> data.save(new CompoundTag())),
 			DataFixTypes.LEVEL);
 
 	private final Map<UUID, Locator> locators = new ConcurrentHashMap<>();
 
 	static ArmorEscortSavedData get(MinecraftServer server) {
-		return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+		return server.overworld().getDataStorage().computeIfAbsent(TYPE);
 	}
 
 	static boolean create(MinecraftServer server, Locator locator) {
@@ -105,13 +107,13 @@ final class ArmorEscortSavedData extends SavedData {
 		return true;
 	}
 
-	private static ArmorEscortSavedData load(CompoundTag root, HolderLookup.Provider registries) {
+	private static ArmorEscortSavedData load(CompoundTag root) {
 		ArmorEscortSavedData data = new ArmorEscortSavedData();
-		ListTag list = root.getList("Carriers", Tag.TAG_COMPOUND);
-		if (root.getInt("Version") != 1) data.setDirty();
+		ListTag list = root.getListOrEmpty("Carriers");
+		if (root.getIntOr("Version", 0) != 1) data.setDirty();
 		for (int index = 0; index < list.size(); index++) {
 			try {
-				Locator locator = readLocator(list.getCompound(index));
+				Locator locator = readLocator(list.getCompoundOrEmpty(index));
 				data.putLoaded(locator);
 			} catch (RuntimeException ignored) {
 				// A corrupt locator cannot justify creating armor; other valid records still recover.
@@ -128,8 +130,7 @@ final class ArmorEscortSavedData extends SavedData {
 		}
 	}
 
-	@Override
-	public CompoundTag save(CompoundTag root, HolderLookup.Provider registries) {
+	public CompoundTag save(CompoundTag root) {
 		root.putInt("Version", 1);
 		ListTag list = new ListTag();
 		for (Locator locator : locators.values()) list.add(writeLocator(locator));
@@ -140,10 +141,10 @@ final class ArmorEscortSavedData extends SavedData {
 	static CompoundTag writeLocator(Locator locator) {
 		CompoundTag tag = new CompoundTag();
 		tag.putInt("Version", 1);
-		tag.putUUID("Owner", locator.ownerId());
-		tag.putUUID("Suit", locator.suitId());
-		tag.putUUID("Carrier", locator.carrierId());
-		tag.putString("Dimension", locator.dimension().location().toString());
+		TagUtils.putUUID(tag, "Owner", locator.ownerId());
+		TagUtils.putUUID(tag, "Suit", locator.suitId());
+		TagUtils.putUUID(tag, "Carrier", locator.carrierId());
+		tag.putString("Dimension", locator.dimension().identifier().toString());
 		tag.putInt("ChunkX", locator.chunkX());
 		tag.putInt("ChunkZ", locator.chunkZ());
 		tag.putString("Phase", locator.phase().name());
@@ -152,8 +153,8 @@ final class ArmorEscortSavedData extends SavedData {
 		tag.putLong("CarrierRevision", locator.carrierRevision());
 		tag.putString("DisplayMode", locator.displayMode().name());
 		if (locator.hasCompleteHome()) {
-			tag.putUUID("HomePlatform", locator.homePlatformId());
-			tag.putString("HomeDimension", locator.homeDimension().location().toString());
+			TagUtils.putUUID(tag, "HomePlatform", locator.homePlatformId());
+			tag.putString("HomeDimension", locator.homeDimension().identifier().toString());
 			tag.putInt("HomeX", locator.homePos().getX());
 			tag.putInt("HomeY", locator.homePos().getY());
 			tag.putInt("HomeZ", locator.homePos().getZ());
@@ -162,31 +163,31 @@ final class ArmorEscortSavedData extends SavedData {
 	}
 
 	static Locator readLocator(CompoundTag tag) {
-		UUID owner = tag.getUUID("Owner");
-		UUID suit = tag.getUUID("Suit");
-		UUID carrier = tag.getUUID("Carrier");
-		ResourceKey<Level> dimension = dimension(tag.getString("Dimension"));
-		StoredPhase phase = StoredPhase.fromName(tag.getString("Phase"));
-		ChargingPlatformDisplayMode displayMode = displayMode(tag.getString("DisplayMode"));
+		UUID owner = TagUtils.getUUID(tag, "Owner");
+		UUID suit = TagUtils.getUUID(tag, "Suit");
+		UUID carrier = TagUtils.getUUID(tag, "Carrier");
+		ResourceKey<Level> dimension = dimension(tag.getStringOr("Dimension", ""));
+		StoredPhase phase = StoredPhase.fromName(tag.getStringOr("Phase", ""));
+		ChargingPlatformDisplayMode displayMode = displayMode(tag.getStringOr("DisplayMode", ""));
 		UUID homePlatform = null;
 		ResourceKey<Level> homeDimension = null;
 		BlockPos homePos = null;
-		if (tag.hasUUID("HomePlatform") && tag.contains("HomeDimension", Tag.TAG_STRING)
-				&& tag.contains("HomeX", Tag.TAG_INT) && tag.contains("HomeY", Tag.TAG_INT)
-				&& tag.contains("HomeZ", Tag.TAG_INT)) {
-			homePlatform = tag.getUUID("HomePlatform");
-			homeDimension = dimension(tag.getString("HomeDimension"));
-			homePos = new BlockPos(tag.getInt("HomeX"), tag.getInt("HomeY"), tag.getInt("HomeZ"));
+		if (TagUtils.hasUUID(tag, "HomePlatform") && tag.contains("HomeDimension")
+				&& tag.contains("HomeX") && tag.contains("HomeY")
+				&& tag.contains("HomeZ")) {
+			homePlatform = TagUtils.getUUID(tag, "HomePlatform");
+			homeDimension = dimension(tag.getStringOr("HomeDimension", ""));
+			homePos = new BlockPos(tag.getIntOr("HomeX", 0), tag.getIntOr("HomeY", 0), tag.getIntOr("HomeZ", 0));
 		}
 		return new Locator(owner, suit, carrier, dimension,
-				tag.getInt("ChunkX"), tag.getInt("ChunkZ"), phase,
+				tag.getIntOr("ChunkX", 0), tag.getIntOr("ChunkZ", 0), phase,
 				homePlatform, homeDimension, homePos, displayMode,
-				tag.getBoolean("GuardRequested"), Math.max(1L, tag.getLong("Revision")),
-				Math.max(1L, tag.getLong("CarrierRevision")));
+				tag.getBooleanOr("GuardRequested", false), Math.max(1L, tag.getLongOr("Revision", 1L)),
+				Math.max(1L, tag.getLongOr("CarrierRevision", 1L)));
 	}
 
 	private static ResourceKey<Level> dimension(String value) {
-		return ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(value));
+		return ResourceKey.create(Registries.DIMENSION, Identifier.parse(value));
 	}
 
 	private static ChargingPlatformDisplayMode displayMode(String value) {
