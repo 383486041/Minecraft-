@@ -305,7 +305,7 @@ tasks.register('verifyArmorOperationArbitration') {
 		}
 		def creativeCore = creativeCoreScreen.getText('UTF-8')
 		if (!creativeCore.contains('flightArmor$unwrapCoreSlot(slot)')
-				|| !creativeCore.contains('clickType != ClickType.PICKUP')
+				|| !(creativeCore.contains('clickType != ClickType.PICKUP') || creativeCore.contains('clickType != ContainerInput.PICKUP'))
 				|| !creativeCore.contains('flightArmor$coreBeforeClick, carriedAfter')
 				|| !creativeCore.contains('ci.cancel()')) {
 			throw new GradleException('Creative inventory core clicks are no longer isolated from backpack clicks')
@@ -342,7 +342,7 @@ tasks.register('verifyArmorCoreSlotTransactions') {
 		if (!creative.contains('flightArmor$coreBeforeClick, carriedAfter')
 				|| !creative.contains('ItemStack.matches(flightArmor$coreBeforeClick, after)')
 				|| !creative.contains('client.player.inventoryMenu.getCarried()')
-				|| !creative.contains('clickType != ClickType.PICKUP')
+				|| !(creative.contains('clickType != ClickType.PICKUP') || creative.contains('clickType != ContainerInput.PICKUP'))
 				|| !creative.contains('ci.cancel()')
 				|| creative.contains('flightArmor$handleCreativeCorePickup')) {
 			throw new GradleException('Creative core slot must retain vanilla cursor movement and send one atomic slot/cursor request')
@@ -615,7 +615,7 @@ tasks.register('verifyHomingMissileEntityRegistration') {
 	doLast {
 		def registration = registrationFile.getText('UTF-8')
 		def entity = entityFile.getText('UTF-8')
-		if (!registration.contains('.build();')) {
+		if (!registration.contains('.build();') && !registration.contains('.build(HOMING_MISSILE_KEY);')) {
 			throw new GradleException('Homing missile must use Fabric injected EntityType.Builder.build() so DFU lookup is deferred until registry assignment.')
 		}
 		if (registration.contains('.build(FlightArmorMod.id(')) {
@@ -630,7 +630,8 @@ tasks.register('verifyHomingMissileEntityRegistration') {
 		if (!registration.contains('Registry.register(BuiltInRegistries.ENTITY_TYPE')) {
 			throw new GradleException('Homing missile must retain native entity-type registry assignment for saving and spawn packets.')
 		}
-		if (!entity.contains('addAdditionalSaveData(CompoundTag tag)') || !entity.contains('readAdditionalSaveData(CompoundTag tag)')) {
+		if (!(entity.contains('addAdditionalSaveData(CompoundTag tag)') || entity.contains('addAdditionalSaveData(ValueOutput output)'))
+				|| !(entity.contains('readAdditionalSaveData(CompoundTag tag)') || entity.contains('readAdditionalSaveData(ValueInput input)'))) {
 			throw new GradleException('Homing missile NBT persistence hooks are missing.')
 		}
 	}
@@ -1121,10 +1122,10 @@ tasks.register('verifyChargingPlatformMechanicalTransition') {
 				throw new GradleException("Charging platform idle state must not use periodic motion: ${periodic}")
 			}
 		}
-		if (!renderer.contains('renderMechanicalLocks(sample.lockProgress()')
+		if ((!renderer.contains('renderMechanicalLocks(sample.lockProgress()') && !renderer.contains('renderMechanicalLocks(state.lockProgress'))
 				|| !renderer.contains('sample.transitioning()')
 				|| !renderer.contains('LOCK_DETAIL_DISTANCE_SQUARED')
-				|| !renderer.contains('MechanicalLockRenderType.INSTANCE')
+				|| (!renderer.contains('MechanicalLockRenderType.INSTANCE') && !renderer.contains('RenderTypes.debugQuads()'))
 				|| !renderer.contains('STATIC_PREVIEW_TICK = 0')) {
 			throw new GradleException('Charging platform one-shot lock geometry, transition LOD, or static preview is missing.')
 		}

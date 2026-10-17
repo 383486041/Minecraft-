@@ -1,5 +1,6 @@
 package dev.codex.flightarmor.core;
 
+import dev.codex.flightarmor.util.TagUtils;
 import dev.codex.flightarmor.variant.ArmorVariant;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
@@ -24,6 +25,11 @@ public final class ArmorCoreNetworkStateTest {
 	public static void main(String[] args) {
 		SharedConstants.tryDetectVersion();
 		Bootstrap.bootStrap();
+		net.minecraft.core.registries.BuiltInRegistries.ITEM.listElements().forEach(holder -> {
+			if (!holder.areComponentsBound()) {
+				holder.bindComponents(net.minecraft.core.component.DataComponentMap.EMPTY);
+			}
+		});
 		verifyIndependentNetworksAndRoundTrip();
 		verifyLegacyOrphanAdoption();
 		verifyCrossNetworkConflictRemoval();
@@ -71,8 +77,8 @@ public final class ArmorCoreNetworkStateTest {
 
 		ArmorCoreSavedData.NetworkRecord source = record.networks.get(coreA);
 		CompoundTag encoded = ArmorCoreSavedData.writeNetwork(coreA, source);
-		require(encoded.getUUID("Core").equals(coreA.coreId()), "serialized network lost core id");
-		require(encoded.getUUID("Nonce").equals(coreA.nonce()), "serialized network lost nonce");
+		require(coreA.coreId().equals(TagUtils.getUUID(encoded, "Core")), "serialized network lost core id");
+		require(coreA.nonce().equals(TagUtils.getUUID(encoded, "Nonce")), "serialized network lost nonce");
 		ArmorCoreSavedData.NetworkRecord decoded = ArmorCoreSavedData.readNetwork(encoded);
 		require(decoded.bindings.equals(source.bindings), "network binding NBT round-trip failed");
 		require(decoded.escortProfiles.equals(source.escortProfiles), "network profile NBT round-trip failed");

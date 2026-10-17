@@ -47,7 +47,7 @@ public final class ArmorEscortPersistenceTest {
 		CompoundTag encoded = ArmorEscortSavedData.writeLocator(source);
 		ArmorEscortSavedData.Locator decoded = ArmorEscortSavedData.readLocator(encoded);
 		require(decoded.equals(source), "escort locator NBT round-trip failed");
-		require(encoded.getInt("Version") == 1, "locator schema version missing");
+		require(encoded.getIntOr("Version", 0) == 1, "locator schema version missing");
 		require(!encoded.toString().contains("Item")
 				&& !encoded.toString().contains("Inventory")
 				&& !encoded.toString().contains("ArmorItems"),

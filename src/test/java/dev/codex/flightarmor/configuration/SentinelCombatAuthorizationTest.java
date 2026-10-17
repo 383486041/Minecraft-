@@ -80,8 +80,8 @@ public final class SentinelCombatAuthorizationTest {
 
 		require(count(controller, "allowsCruiseRanged(carrier, now)") >= 4,
 				"cruise wrist, core, drone and manual core lanes must all revalidate flight form");
-		require(count(controller,
-						"allowsCruiseHeavyMelee(carrier, combatTime(owner.getServer()))") >= 2,
+		require(count(controller, "allowsCruiseHeavyMelee(carrier, combatTime(owner.getServer()))") >= 2
+						|| count(controller, "allowsCruiseHeavyMelee(carrier, combatTime(owner.level().getServer()))") >= 2,
 				"remote X basic melee and J ultimate must both revalidate breach form");
 		require(controller.contains(
 						"ArmorConfigurationAccess.allowsRangedCombat(living, gameTime)")

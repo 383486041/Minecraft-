@@ -49,12 +49,12 @@ public final class ArmorIntegrityPersistenceTest {
 				data.damage(owner, suit, 175, direct, causing, 400L);
 		require(damage.changed() && damage.current() == 825, "damage mutation failed");
 
-		CompoundTag encoded = data.save(new CompoundTag(), null);
+		CompoundTag encoded = data.save(new CompoundTag());
 		require(!encoded.toString().contains("ItemStack")
 				&& !encoded.toString().contains("Inventory")
 				&& !encoded.toString().contains("ArmorItems"),
 				"integrity SavedData duplicated armor items");
-		ArmorIntegritySavedData decoded = ArmorIntegritySavedData.load(encoded, null);
+		ArmorIntegritySavedData decoded = ArmorIntegritySavedData.load(encoded);
 		ArmorIntegritySavedData.Snapshot snapshot = decoded.snapshot(owner, suit);
 		require(snapshot.integrity() == 825 && snapshot.revision() == 1L,
 				"restart round-trip lost integrity or revision");
@@ -77,7 +77,7 @@ public final class ArmorIntegrityPersistenceTest {
 		CompoundTag root = new CompoundTag();
 		root.putInt("Version", 1);
 		root.put("Suits", list);
-		ArmorIntegritySavedData loaded = ArmorIntegritySavedData.load(root, null);
+		ArmorIntegritySavedData loaded = ArmorIntegritySavedData.load(root);
 		require(loaded.snapshot(owner, suit).integrity() == 200,
 				"equal-revision duplicate did not fail safe to lower integrity");
 		require(loaded.snapshot(UUID.randomUUID(), suit).integrity()

@@ -125,8 +125,10 @@ public final class ArmorRemoteCommandContractTest {
 		int escortTarget = escort.indexOf("Vec3 commandAnchor", remoteEscort);
 		require(remoteEscort >= 0 && escortTarget > remoteEscort,
 				"escort remote override precedes autonomous movement");
-		require(initializer.contains("playC2S().register(ArmorRemoteCommandPayload.TYPE")
-						&& initializer.contains("playS2C().register(ArmorRemoteCommandAckPayload.TYPE")
+		require((initializer.contains("playC2S().register(ArmorRemoteCommandPayload.TYPE")
+						|| initializer.contains("serverboundPlay().register(ArmorRemoteCommandPayload.TYPE"))
+						&& (initializer.contains("playS2C().register(ArmorRemoteCommandAckPayload.TYPE")
+						|| initializer.contains("clientboundPlay().register(ArmorRemoteCommandAckPayload.TYPE"))
 						&& initializer.contains("ArmorRemoteCommandController.handleCommand")
 						&& initializer.contains("ArmorRemoteCommandController.tickServer"),
 				"payload and lifecycle registration");

@@ -58,14 +58,17 @@ public final class ArmorConfigurationContractTest {
 						&& payload.contains("armor_configuration_toggle")
 						&& !payload.contains("SentinelArmorMode"),
 				"client packet must carry intent and sequence only, never the requested result");
-		require(client.contains("GLFW.GLFW_KEY_M")
-						&& client.indexOf("consumeClick()") < client.indexOf("client.screen != null")
+		int screenIdx = client.indexOf("client.gui.screen() != null");
+		if (screenIdx < 0) screenIdx = client.indexOf("client.screen != null");
+		require((client.contains("GLFW.GLFW_KEY_M") || client.contains("InputConstants.KEY_M"))
+						&& client.indexOf("consumeClick()") < screenIdx
 						&& client.contains("ArmorAssemblyClient.isOperationCapturedThisTick(client)")
 						&& client.contains("ArmorAssemblyClient.captureOperationThisTick(client)")
 						&& client.contains("new ArmorConfigurationTogglePayload(sequence)")
 						&& !client.contains("ArmorAttackIntentPayload"),
 				"M must be drained safely and routed through its dedicated operation lane");
-		require(initializer.contains("playC2S().register(ArmorConfigurationTogglePayload.TYPE")
+		require((initializer.contains("playC2S().register(ArmorConfigurationTogglePayload.TYPE")
+						|| initializer.contains("serverboundPlay().register(ArmorConfigurationTogglePayload.TYPE"))
 						&& initializer.contains("ArmorConfigurationController.handleToggle")
 						&& initializer.contains("ArmorConfigurationController.remove")
 						&& initializer.contains("ArmorConfigurationController.clearAll"),

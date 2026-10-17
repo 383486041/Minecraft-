@@ -42,8 +42,10 @@ public final class ArmorAssemblyFlightUnlockContractTest {
 						"boolean coreFlightReady = flightGear && !armorAssembling;")
 						&& flightClient.contains(
 						"boolean bootOnlyAssemblyHover = active && bootAssemblyHoverReady && !coreFlightReady;")
-						&& flightClient.contains(
-						"boolean controlsUnlocked = active && !bootOnlyAssemblyHover && client.screen == null;"),
+						&& (flightClient.contains(
+						"boolean controlsUnlocked = active && !bootOnlyAssemblyHover && client.screen == null;")
+						|| flightClient.contains(
+						"boolean controlsUnlocked = active && !bootOnlyAssemblyHover && client.gui.screen() == null;")),
 				"completed full armor does not leave the client in boot-only hover");
 		require(flightClient.contains(
 						"current.equals(lastSent) && player.tickCount - lastPacketTick < 2"),

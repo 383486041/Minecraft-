@@ -22,6 +22,8 @@ public final class ArmorPrimaryFailoverPolicyTest {
 	}
 
 	public static void main(String[] args) {
+		net.minecraft.SharedConstants.tryDetectVersion();
+		net.minecraft.server.Bootstrap.bootStrap();
 		confirmedMissingPrimaryPromotesWornBeforeCarrierAndPlatform();
 		carrierOutranksPlatformWhenNoWornSuitExists();
 		offlineUnloadedPrimaryDoesNotFailOver();

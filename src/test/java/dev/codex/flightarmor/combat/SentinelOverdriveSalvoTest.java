@@ -167,7 +167,7 @@ public final class SentinelOverdriveSalvoTest {
 				"high-speed Sentinel G lifecycle or independent Ctrl-boost cancellation regressed");
 		require(salvo.contains("DestructiveLaserController.resolveCoreBeam(")
 						&& destructive.contains("TerrainDestructionGuard.terrainGriefAllowed(")
-						&& terrainGuard.contains("GameRules.RULE_MOBGRIEFING")
+						&& (terrainGuard.contains("GameRules.RULE_MOBGRIEFING") || terrainGuard.contains("GameRules.MOB_GRIEFING"))
 						&& terrainGuard.contains("PlayerBlockBreakEvents.BEFORE")
 						&& terrainGuard.contains("PROTECTED"),
 				"wing/chest corridors bypassed bounded mobGriefing or protection hooks");

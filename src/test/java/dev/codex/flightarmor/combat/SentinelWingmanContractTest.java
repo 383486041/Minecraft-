@@ -68,12 +68,12 @@ public final class SentinelWingmanContractTest {
 				? entity.substring(clientVisualStart, clientVisualEnd) : "";
 
 		require(entity.contains("extends Entity")
-						&& entity.contains("EntityDataSerializers.OPTIONAL_UUID")
+						&& (entity.contains("EntityDataSerializers.OPTIONAL_UUID") || entity.contains("EntityDataSerializers.STRING"))
 						&& entity.contains("EntityDataSerializers.LONG")
 						&& entity.contains("public boolean shouldBeSaved()")
 						&& entity.contains("return false;"),
 				"wingman identity must be synced, real and derived rather than world-persistent");
-		require(entity.contains("if (level().isClientSide)")
+		require((entity.contains("if (level().isClientSide)") || entity.contains("if (level().isClientSide())"))
 						&& entity.contains("tickClientVisualState()")
 						&& entity.contains("getClientVisualYaw(float partialTick)")
 						&& entity.contains("getClientVisualPitch(float partialTick)")
@@ -97,7 +97,8 @@ public final class SentinelWingmanContractTest {
 						&& renderer.contains("wingman.getClientVisualRenderOffset(partialTick)")
 						&& !renderer.contains("wingman.getDeltaMovement()"),
 				"client wingman rendering must smooth server observations without a second movement authority");
-		require(entity.contains("getUUID(), level.dimension().location(), getShotSequence()")
+		require((entity.contains("getUUID(), level.dimension().location(), getShotSequence()")
+						|| entity.contains("getUUID(), level.dimension().identifier(), getShotSequence()"))
 						&& entity.contains("0, ArmorAttackType.CRUISE_CORE_BEAM"),
 				"wingman FX identity must not collide with the worn player's combat lane");
 		require(entity.contains("RECOMBINE_DURATION_TICKS = 30L")
@@ -153,8 +154,14 @@ public final class SentinelWingmanContractTest {
 				"VertexConsumer emissive = buffers.getBuffer(");
 		int emissiveWrite = moduleMesh.indexOf(
 				"mesh.render(group, poses.last(), emissive, LightTexture.FULL_BRIGHT");
-		require(shellConsumer >= 0 && shellWrite > shellConsumer
-						&& emissiveConsumer > shellWrite && emissiveWrite > emissiveConsumer,
+		boolean legacyPass = shellConsumer >= 0 && shellWrite > shellConsumer
+						&& emissiveConsumer > shellWrite && emissiveWrite > emissiveConsumer;
+		int shellSubmit = moduleMesh.indexOf("RenderTypes.armorCutoutNoCull(");
+		int emissiveSubmit = moduleMesh.indexOf("RenderTypes.entityTranslucentEmissive(");
+		boolean modernSubmitPass = shellSubmit >= 0 && emissiveSubmit > shellSubmit
+				&& moduleMesh.contains("(pose, shell) -> mesh.render(group, pose, shell, packedLight")
+				&& moduleMesh.contains("(pose, emissive) -> mesh.render(group, pose, emissive, FULL_BRIGHT");
+		require(legacyPass || modernSubmitPass,
 				"OBJ shell pass must finish before switching BufferSource to the emissive pass");
 		require(controller.contains("SentinelArmorMode.OVERDRIVE_FLIGHT")
 						&& controller.contains("configured.suitId()")
@@ -208,7 +215,8 @@ public final class SentinelWingmanContractTest {
 						&& cruiseBranch > sentinelSend
 						&& cruiseSend > cruiseBranch,
 				"stable worn Sentinel overdrive must claim H before the unchanged cruise-guard branch");
-		require(mod.contains("PayloadTypeRegistry.playC2S().register(SentinelWingmanCommandPayload.TYPE")
+		require((mod.contains("PayloadTypeRegistry.playC2S().register(SentinelWingmanCommandPayload.TYPE")
+						|| mod.contains("PayloadTypeRegistry.serverboundPlay().register(SentinelWingmanCommandPayload.TYPE"))
 						&& mod.contains("ServerPlayNetworking.registerGlobalReceiver("
 								+ "SentinelWingmanCommandPayload.TYPE")
 						&& mod.contains("SentinelWingmanController.handleCommand("
