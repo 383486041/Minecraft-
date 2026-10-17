@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 /** 服务端权威缩放完整同型号套装受到的击退，不改变客户端或其他生物。 */
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityVariantKnockbackMixin {
-	@ModifyVariable(method = "knockback", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+	@ModifyVariable(method = "knockback(DDDLnet/minecraft/world/damagesource/DamageSource;FZ)V", at = @At("HEAD"), argsOnly = true, ordinal = 0)
 	private double flightArmor$applyVariantKnockbackProfile(double strength) {
 		LivingEntity self = (LivingEntity) (Object) this;
 		if (!(self instanceof ServerPlayer player) || !Double.isFinite(strength)) return strength;

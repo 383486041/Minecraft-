@@ -26,7 +26,7 @@ public abstract class FlightPoseMixin {
 	}
 
 	@Redirect(
-			method = {"travel", "handleRelativeFrictionAndCalculateMovement"},
+			method = "handleRelativeFrictionAndCalculateMovement",
 			at = @At(value = "INVOKE",
 					target = "Lnet/minecraft/world/entity/LivingEntity;moveRelative(FLnet/minecraft/world/phys/Vec3;)V")
 	)
